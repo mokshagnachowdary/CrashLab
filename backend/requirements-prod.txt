@@ -1,0 +1,12 @@
+# CPU-only inference image: install torch from the CPU wheel index first (see Dockerfile)
+numpy>=2.0
+pandas>=2.2
+scipy>=1.13
+arch>=7.0
+statsmodels>=0.14
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.8
+sqlalchemy>=2.0
+alembic>=1.13
+psycopg2-binary>=2.9

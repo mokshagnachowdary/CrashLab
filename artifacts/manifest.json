@@ -1,0 +1,19 @@
+{
+ "regime": {
+  "q_elevated": 0.2089936313405239,
+  "q_extreme": 0.41383533184056726,
+  "names": [
+   "normal",
+   "elevated",
+   "extreme"
+  ]
+ },
+ "split": {
+  "n_train": 2681,
+  "n_val": 893,
+  "n_test": 895,
+  "test_start": "2023-02-06"
+ },
+ "source": "yahoo_finance",
+ "synthetic": false
+}

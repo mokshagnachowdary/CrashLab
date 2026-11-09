@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: crashlab, POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-crashlab}", POSTGRES_DB: crashlab }
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U crashlab"], interval: 5s, retries: 10 }
+  backend:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    environment:
+      DATABASE_URL: postgresql+psycopg2://crashlab:${POSTGRES_PASSWORD:-crashlab}@db:5432/crashlab
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:8080}"
+    volumes: ["./artifacts:/artifacts", simdata:/data]
+    depends_on: { db: { condition: service_healthy } }
+    ports: ["8000:8000"]
+  frontend:
+    build: ./frontend
+    ports: ["8080:80"]
+    depends_on: [backend]
+volumes: { pgdata: {}, simdata: {} }

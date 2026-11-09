@@ -1,0 +1,18 @@
+# Interview guide — decisions to be ready to defend
+- **Why log returns / common calendar, no forward-fill?** Additivity over horizon; ffill fabricates zero returns and distorts correlation. Gap returns span the missing days.
+- **Why FHS as the strong baseline?** GARCH captures volatility clustering; resampling *rows* of standardised residuals keeps cross-asset dependence. It handles vol dynamics the copulas lack.
+- **t vs Gaussian copula:** λ_L = 2·t_{ν+1}(−√((ν+1)(1−ρ)/(1+ρ))) > 0 vs 0. ρ from Kendall τ (sin(πτ/2)) is robust to heavy tails; PSD repair; ν by profile likelihood.
+- **cVAE design:** GRU encoder/decoder over a padded ≤20-day window; condition = masked targets in sd·√h units, horizon, one-hot regime; masks dropped randomly so one net does unconditional and partial conditioning. β<1 + KL annealing avoids posterior collapse; learned Cholesky residual restores cross-asset dependence (my first version with independent noise gave NIFTY–BANK tail dependence 0.07 vs 0.73 real — fixed, and I report it).
+- **Why not rescale to hit constraints?** It would hide model failure and distort dependence; instead I report share-within-tolerance.
+- **Fair conditional comparison:** baselines are unconditional, so analog selection from a 20× pool, unaltered paths.
+- **Backtests:** Kupiec POF, Christoffersen independence/CC, Acerbi–Székely Z2 with MC p-values from the model's predictive samples; non-overlapping windows; low power at 99%.
+- **Honest outcome (real data, test 2023-02 → 2026-11):** FHS wins marginal fit (Wasserstein 0.258 vs cVAE 0.572), NIFTY ES95 error and vol-clustering, and is the only model with a calibrated 95% VaR backtest (8 exceedances vs 8.9 expected, Kupiec p=0.75). Gaussian, both copulas and the cVAE are too conservative (1–2 exceedances, rejected at 5%) because they are unconditional on volatility and trained on crisis-heavy history while the test period was calmer. cVAE has the lowest correlation error (0.178 vs 0.183–0.191, within noise). Native cVAE conditioning hit the NIFTY −12% target in 37% of paths vs 44% for FHS analog selection. **Say this plainly in interviews — it shows scientific honesty.**
+- **What I would do next:** give every model a volatility-state input (the cVAE conditioning on recent realised vol), choose the design on validation data only, and report both versions.
+- **Why FHS wins:** it re-initialises GARCH variance at each forecast origin; the others implicitly average over all regimes in training.
+- **Bugs found by testing:** parser clause bleed; synthetic-generator explosion; stale cache silently reusing old data; Windows incompatibilities (Unix-only `resource` module, import path) — all fixed.
+
+## Résumé bullets (every number is measured; source: `artifacts/research_results.json`)
+- Built CRASHLAB, an end-to-end generative stress-testing platform (PyTorch conditional GRU-VAE, GJR-GARCH FHS, Gaussian/Student-t copulas, FastAPI, React/TypeScript), trained on 4,469 daily log returns across 6 Indian market series (NSE indices, gold, crude, USD/INR; 2008–2026) with a strict chronological train/validation/test split.
+- Benchmarked 5 simulators out-of-sample (895 test days) with Wasserstein, correlation, tail-dependence, ES and VaR backtests (Kupiec, Christoffersen, Acerbi–Székely); reported that FHS outperformed the VAE on marginal fit (0.258 vs 0.572) and was the only model with a calibrated 95% VaR (8/178 exceedances).
+- Served 1,000–10,000-path scenario simulations through an async API (cVAE ≈ 57k paths/s on a 2-vCPU cloud machine) with a 6-page interactive dashboard and 13 automated tests.
+Do **not** claim the VAE outperforms baselines; do not quote numbers other than those in the report.

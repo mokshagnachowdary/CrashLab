@@ -1,0 +1,7 @@
+# Model card — CRASHLAB scenario generators
+**Intended use:** research/education stress testing; exploring *conditional, model-based* multi-asset scenarios. **Not** for trading, price prediction, regulatory capital or advice.
+**Models:** Gaussian; Gaussian copula & Student-t copula (t marginals); GJR-GARCH(1,1)-t Filtered Historical Simulation; conditional GRU-VAE (PyTorch, CPU-friendly, ~tens of thousands of parameters).
+**cVAE inputs:** per-asset cumulative-return targets + masks, horizon (≤20 trading days), vol regime. **Outputs:** daily multivariate log-return paths. Constraints are never enforced by rescaling; satisfaction is measured.
+**Training data:** daily log returns of NIFTY 50/Bank/IT, gold & crude futures, USD/INR; chronological 60/20/20 split; scalers and regime thresholds fit on train only. Provenance is recorded in `artifacts/manifest.json` (`synthetic: false` = Yahoo Finance history, unofficial, subject to provider terms; the pipeline refuses to fall back to synthetic data with `--no-synthetic`).
+**Evaluation:** see `docs/RESEARCH_REPORT.md` (generated from artifacts).
+**Known limitations:** unprecedented regimes cannot be validated; the cVAE needs 5–20-day windows; copulas have no volatility dynamics; analog-selection conditioning for baselines can fail at extreme targets; futures proxies; small backtest samples; single-seed ablations; FHS is volatility-state-conditioned while the other generators are not.

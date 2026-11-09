@@ -1,0 +1,6 @@
+# Research methodology
+**Question:** can a conditional generative model improve multivariate stress-scenario generation over conventional statistical simulation?
+**Protocol:** (1) log returns on a common trading calendar, no forward-fill; (2) chronological split train/val/test = 60/20/20; baselines and cVAE use train(+val for baselines); cVAE early-stops on val; test is untouched; (3) models compared unconditionally on test-period 10-day windows (Wasserstein, KS, correlation, lower-tail dependence, joint exceedance, vol-clustering ACF, ES) and conditionally on a fixed stress (constraint satisfaction); (4) 5-day portfolio VaR/ES backtests on non-overlapping test windows (Kupiec POF, Christoffersen independence & conditional coverage, Acerbi–Székely Z2 with Monte-Carlo p-values); (5) ablations: unconditional vs conditional VAE, Gaussian vs t-copula (in the main comparison), Gaussian vs Student-t likelihood (tail-aware), latent size, training-window length.
+**Retention rule:** the tail-aware objective is kept only if validation/OOS metrics improve; the report states the outcome either way.
+**Acerbi–Székely variant:** Z2 = Σ L_t·1[L_t ≥ VaR_t] / (T(1−α)ES_t) − 1; one-sided MC p-value from the model's own predictive samples.
+**Threats to validity:** one dataset/seed, overlapping test windows, small samples, model-selection on a single split.

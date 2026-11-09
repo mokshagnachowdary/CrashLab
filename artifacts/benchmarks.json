@@ -1,0 +1,57 @@
+{
+ "cpu_count": 2,
+ "models": {
+  "gaussian": {
+   "1000": {
+    "median_seconds": 0.03301953100000787,
+    "scenarios_per_second": 30285.106108859072
+   },
+   "10000": {
+    "median_seconds": 0.3502392950000228,
+    "scenarios_per_second": 28551.90763217859
+   }
+  },
+  "gaussian_copula": {
+   "1000": {
+    "median_seconds": 0.6825477980000016,
+    "scenarios_per_second": 1465.0988589080432
+   },
+   "10000": {
+    "median_seconds": 6.6574876380000205,
+    "scenarios_per_second": 1502.06812896225
+   }
+  },
+  "t_copula": {
+   "1000": {
+    "median_seconds": 0.8331264120000128,
+    "scenarios_per_second": 1200.2980407251625
+   },
+   "10000": {
+    "median_seconds": 9.291814193999983,
+    "scenarios_per_second": 1076.2160963633253
+   }
+  },
+  "fhs": {
+   "1000": {
+    "median_seconds": 0.03704253800000856,
+    "scenarios_per_second": 26995.99039352457
+   },
+   "10000": {
+    "median_seconds": 0.479714247000004,
+    "scenarios_per_second": 20845.743195114897
+   }
+  },
+  "cvae": {
+   "1000": {
+    "median_seconds": 0.01053390699999568,
+    "scenarios_per_second": 94931.5386969346
+   },
+   "10000": {
+    "median_seconds": 0.17513980900000092,
+    "scenarios_per_second": 57097.24166708408
+   }
+  }
+ },
+ "peak_rss_mb": 1272.6640625,
+ "note": "Conditional generation incl. constraint report; baselines include the 20x analog pool. Measured on this machine only."
+}

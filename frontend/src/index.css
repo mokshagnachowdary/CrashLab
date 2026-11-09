@@ -1,0 +1,41 @@
+@tailwind base; @tailwind components; @tailwind utilities;
+:root {
+  color-scheme: dark;
+  --app-bg: #050509;
+  --sidebar-bg: #08080F;
+  --card-bg: #0C0C16;
+  --surface-bg: #11111D;
+  --accent-cyan: #00DFFF;
+  --accent-purple: #8B35FF;
+  --accent-pink: #FF29C6;
+  --text-primary: #F3F4FA;
+  --text-secondary: #9293A9;
+  --text-muted: #77788F;
+  --border-subtle: rgba(125,110,190,0.18);
+}
+html, body, #root { min-height: 100%; }
+body { background: var(--app-bg); color: var(--text-primary); font-family: Inter, system-ui, sans-serif; font-size: 13px; }
+body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(145deg, #07070D 0%, var(--app-bg) 55%, #08070F 100%); }
+.glass { background: var(--card-bg); border: 1px solid var(--border-subtle); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); transition: border-color .18s, background-color .18s; }
+.glass:hover { border-color: rgba(125,110,190,.3); }
+.glow { box-shadow: 0 0 0 1px rgba(0,223,255,.28); }
+.lbl { font-size: 10px; letter-spacing: .075em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
+.num { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 8px; padding: 8px 13px; font-weight: 600; font-size: 12px; transition: all .18s; }
+.btn-primary { background: linear-gradient(110deg, #00BFD9, #7133D4); color: #050509; box-shadow: 0 3px 12px rgba(0,223,255,.12); }
+.btn-primary:hover:not(:disabled) { box-shadow: 0 4px 16px rgba(0,223,255,.2); transform: translateY(-1px); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-ghost { border: 1px solid var(--border-subtle); color: var(--text-secondary); background: var(--surface-bg); } .btn-ghost:hover { color: var(--text-primary); border-color: rgba(0,223,255,.35); background: rgba(0,223,255,.045); }
+input, select, textarea { background: var(--surface-bg); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 10px; color: var(--text-primary); outline: none; width: 100%; }
+input:focus, select:focus, textarea:focus { border-color: rgba(0,223,255,.58); box-shadow: 0 0 0 2px rgba(0,223,255,.1); }
+select option { background: var(--surface-bg); color: var(--text-primary); }
+input[type=range] { padding: 0; accent-color: var(--accent-cyan); }
+.skeleton { background: linear-gradient(90deg, rgba(125,110,190,.06), rgba(125,110,190,.13), rgba(125,110,190,.06)); background-size: 200% 100%; animation: sh 1.4s infinite; border-radius: 8px; }
+@keyframes sh { to { background-position: -200% 0; } }
+.fade { animation: fade .35s ease both; } @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+.recharts-responsive-container { background: #090910; border: 1px solid rgba(125,110,190,.12); border-radius: 8px; }
+.recharts-tooltip-wrapper { outline: none; }
+table { width: 100%; border-collapse: collapse; } th { text-align: left; } th, td { padding: 7px 8px; border-bottom: 1px solid var(--border-subtle); font-size: 12px; }
