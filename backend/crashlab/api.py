@@ -10,6 +10,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -296,6 +297,36 @@ def get_scenario(sid: str, full: bool = True):
         d = _job_dict(j)
         if full and j.status == "completed": d["summary"] = j.summary
         return d
+
+
+@app.delete("/api/scenarios/{sid}")
+def delete_scenario(sid: str):
+    with db.SessionLocal() as s:
+        j = s.get(db.SimulationJob, sid)
+        if not j: raise HTTPException(404, "scenario not found")
+        if j.request.get("source") != "custom":
+            raise HTTPException(403, "only custom Story Mode scenarios can be deleted; built-in and older runs are protected")
+        if j.status in ("queued", "running"):
+            raise HTTPException(409, f"cannot delete a scenario while it is {j.status}")
+
+        artifact = None
+        if j.array_path:
+            simulations_dir = (DATA_DIR / "simulations").resolve()
+            artifact = Path(j.array_path).resolve()
+            try:
+                artifact.relative_to(simulations_dir)
+            except ValueError:
+                log.error("refusing to delete scenario artifact outside simulations directory: %s", artifact)
+                raise HTTPException(500, "scenario artifact path is invalid")
+            try:
+                artifact.unlink(missing_ok=True)
+            except OSError as e:
+                log.exception("failed to remove scenario artifact %s", artifact)
+                raise HTTPException(500, "could not remove scenario data; scenario was not deleted") from e
+
+        s.delete(j)
+        s.commit()
+        return {"deleted": sid}
 
 
 @app.get("/api/scenarios/{sid}/export")

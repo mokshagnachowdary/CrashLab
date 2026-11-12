@@ -126,3 +126,46 @@ def test_every_model_produces_a_saved_scenario(client):
         assert scenario["request"]["model"] == model
         assert scenario["meta"]["model"] == model
         assert scenario["summary"]["n"] == 25
+
+
+def test_delete_only_removes_finished_custom_scenarios(client):
+    import uuid
+    from crashlab import db
+    import crashlab.api as api
+
+    simulations_dir = api.DATA_DIR / "simulations"
+    simulations_dir.mkdir(parents=True, exist_ok=True)
+    custom_id, preset_id, active_id = (uuid.uuid4().hex for _ in range(3))
+    artifact = simulations_dir / f"{custom_id}.npz"
+    artifact.write_bytes(b"test artifact")
+    with db.SessionLocal() as session:
+        session.add_all([
+            db.SimulationJob(
+                id=custom_id,
+                name="custom scenario",
+                request={"source": "custom"},
+                status="completed",
+                array_path=str(artifact),
+            ),
+            db.SimulationJob(
+                id=preset_id,
+                name="built-in scenario",
+                request={"source": "preset", "preset_name": "Banking Crisis"},
+                status="completed",
+            ),
+            db.SimulationJob(
+                id=active_id,
+                name="active custom scenario",
+                request={"source": "custom"},
+                status="running",
+            ),
+        ])
+        session.commit()
+
+    deleted = client.delete(f"/api/scenarios/{custom_id}")
+    assert deleted.status_code == 200
+    assert deleted.json() == {"deleted": custom_id}
+    assert not artifact.exists()
+    assert client.get(f"/api/scenarios/{custom_id}").status_code == 404
+    assert client.delete(f"/api/scenarios/{preset_id}").status_code == 403
+    assert client.delete(f"/api/scenarios/{active_id}").status_code == 409

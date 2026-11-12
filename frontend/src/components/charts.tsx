@@ -89,9 +89,9 @@ export function Gauge({ value, label, sub, danger }: { value: number; label: str
     <div className="absolute inset-x-0 bottom-1 text-center"><div className="num text-2xl font-semibold">{label}</div>{sub && <div className="text-[11px] text-tx3">{sub}</div>}</div></div>);
 }
 
-export function MiniBars({ values, color = C.blue, height = 52 }: { values: number[]; color?: string; height?: number }) {
+export function MiniBars({ values, labels, color = C.blue, height = 52 }: { values: number[]; labels?: string[]; color?: string; height?: number }) {
   const data = values.map((v, i) => ({ i, v }));
-  return (<ResponsiveContainer width="100%" height={height}><BarChart data={data} margin={{ top: 2, bottom: 0, left: 0, right: 0 }}><Tooltip {...TT} formatter={(v: any) => [Number(v).toLocaleString(), "paths"]} labelFormatter={() => "run"} cursor={false} />
+  return (<ResponsiveContainer width="100%" height={height}><BarChart data={data} margin={{ top: 2, bottom: 0, left: 0, right: 0 }}><Tooltip {...TT} formatter={(v: any) => [Number(v).toLocaleString(), "simulated paths"]} labelFormatter={(i) => labels?.[Number(i)] ?? `Run ${Number(i) + 1}`} cursor={false} />
     <Bar dataKey="v" fill={color} radius={[3, 3, 0, 0]} maxBarSize={22} isAnimationActive={!REDUCE} /></BarChart></ResponsiveContainer>);
 }
 
