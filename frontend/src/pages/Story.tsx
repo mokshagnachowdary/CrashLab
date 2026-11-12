@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Sparkles, Wand2 } from "lucide-react";
+import { ChevronDown, Loader2, Sparkles, Wand2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ASSETS, LABEL, MODEL_LABEL, api, post, pct } from "../api";
 import { ErrorState, GlassCard, PageIntro, SyntheticBanner, useToast } from "../components/ui";
@@ -17,17 +17,18 @@ const PRESETS: { name: string; text: string }[] = [
 const SHOCK_ASSETS = ["NIFTY", "USDINR", "BANK", "IT", "GOLD", "CRUDE"] as const;
 type Draft = { shocks: Record<string, number | undefined>; horizon: number; regime: string; n: number; model: string };
 const MODEL_DESCRIPTION: Record<string, string> = {
-  cvae: "Conditional VAE: a learned sequence generator with native asset-target conditioning.",
-  fhs: "Filtered Historical Simulation: resamples synchronized historical residuals with volatility dynamics.",
-  gaussian: "Gaussian: multivariate normal returns using estimated means and covariance.",
-  gaussian_copula: "Gaussian Copula: t-distributed asset returns with Gaussian cross-asset dependence.",
-  t_copula: "Student-t Copula: t-distributed asset returns with tail-dependent cross-asset dependence.",
+  cvae: "Recommended. Learns patterns and generates connected asset paths, with support for return targets.",
+  fhs: "Reuses historical market patterns and changing volatility.",
+  gaussian: "A simpler model based on average returns and how assets moved together.",
+  gaussian_copula: "Models assets moving together, but does not capture extreme co-moves as strongly.",
+  t_copula: "Allows extreme moves across assets to occur together more often.",
 };
 
 export default function Story() {
   const nav = useNavigate(), toast = useToast(), { setSimId } = useApp(), ov = useOverview();
   const [text, setText] = useState(""); const [parsed, setParsed] = useState<any>(null); const [lastParsed, setLastParsed] = useState("");
   const [selectedPreset, setSelectedPreset] = useState("");
+  const [parsing, setParsing] = useState(false);
   const [d, setD] = useState<Draft>({ shocks: {}, horizon: 10, regime: "", n: 1000, model: "cvae" });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<unknown>(null);
   const [job, setJob] = useState<any>(null);
@@ -35,24 +36,23 @@ export default function Story() {
   const models: string[] = modelsQuery.data?.models?.map((model: any) => model.id) ?? [];
 
   const parse = async (t = text) => {
-    setErr(null);
+    setErr(null); setParsing(true);
     try {
       const p = await post("/api/scenarios/parse", { text: t }); setParsed(p); setLastParsed(t);
       setD((x) => ({ ...x, shocks: Object.fromEntries(Object.entries(p.shocks)), horizon: p.horizon ?? x.horizon, regime: p.regime ?? "" }));
-      if (!Object.keys(p.shocks).length && !p.horizon && !p.regime) toast("Nothing recognised in that text — see the hints below.", "err");
+      if (!p.found.length) toast("I couldn't identify a market move. Try an example or edit the settings below.", "err");
       return p;
     } catch (e) { setErr(e); toast(String((e as Error).message), "err"); }
+    finally { setParsing(false); }
   };
   const run = async () => {
     setErr(null);
-    let draft = d;
-    let validationErrors = lastParsed === text ? (parsed?.validation_errors ?? []) : [];
-    if (text.trim().length >= 3 && lastParsed !== text) {
-      setBusy(true);
-      const p = await parse();
-      if (!p || !p.found.length) { setBusy(false); return; }
-      draft = { ...d, shocks: Object.fromEntries(Object.entries(p.shocks)), horizon: p.horizon ?? d.horizon, regime: p.regime ?? "" };
-      validationErrors = p.validation_errors ?? [];
+    const draft = d;
+    const validationErrors = lastParsed === text ? (parsed?.validation_errors ?? []) : [];
+    if (text.trim() && lastParsed !== text) return;
+    if (text.trim() && !parsed?.found?.length) {
+      setErr(new Error("CrashLab couldn't identify a market move in this description. Edit it or clear it and set the targets below."));
+      return;
     }
     const verrs = [...validationErrors];
     if (draft.n < 1 || draft.n > 5000) verrs.push("Scenario count must be 1–5,000");
@@ -84,54 +84,107 @@ export default function Story() {
         description="Describe a market shock in plain English and turn it into a structured scenario for simulation and risk analysis."
       />
       <SyntheticBanner synthetic={ov.data?.synthetic} />
-      <div className="py-4 text-center"><h2 className="text-3xl font-semibold">Dream a <span className="text-cyan">market crash.</span></h2>
-        <p className="mx-auto mt-2 max-w-xl text-tx2">Describe a hypothetical financial crisis. Let the simulation engine explore how markets and portfolios could respond.</p></div>
-      <GlassCard title="1. Choose where your scenario starts">
-        <p className="mb-3 text-[12px] text-tx2">Built-in templates are examples you can edit. Choose “Custom input” to write a scenario from scratch. Nothing is generated until you press Generate.</p>
-        <div className="mb-3 max-w-sm"><label className="lbl" htmlFor="scenario-preset">Starting point</label>
-          <select id="scenario-preset" value={selectedPreset} onChange={(e) => {
-            const preset = PRESETS.find((item) => item.name === e.target.value);
-            setSelectedPreset(preset?.name ?? "");
-            if (preset) { setText(preset.text); parse(preset.text); }
-          }}>
-            <option value="">Custom input — write your own scenario</option>
-            {PRESETS.map((preset) => <option key={preset.name} value={preset.name}>{preset.name}</option>)}
-          </select>
+      <div className="rounded-xl border border-white/[.08] bg-white/[.025] p-4">
+        <p className="text-[13px] font-semibold">Create a scenario in three steps</p>
+        <div className="mt-2 grid gap-2 text-[12px] text-tx2 sm:grid-cols-3">
+          <p><b className="text-cyan">1. Start</b> with an example or your own idea.</p>
+          <p><b className="text-cyan">2. Review</b> what CrashLab understood and change it.</p>
+          <p><b className="text-cyan">3. Create</b> simulated possibilities to explore.</p>
         </div>
-        <p className="mb-2 rounded-lg border border-white/[.07] bg-white/[.025] px-3 py-2 text-[12px] text-tx2" role="status">
+      </div>
+      <GlassCard title="1. Choose an example or start from scratch">
+        <p className="mb-3 text-[12px] text-tx2">Choose a ready-made example to edit, or leave them unselected and describe your own market event.</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {PRESETS.map((preset) => <button key={preset.name} type="button" disabled={busy || parsing} className={`rounded-lg border p-3 text-left transition ${selectedPreset === preset.name ? "border-cyan/50 bg-cyan/10" : "border-white/[.08] bg-white/[.02] hover:border-white/20"}`}
+            onClick={() => { setSelectedPreset(preset.name); setText(preset.text); setParsed(null); setLastParsed(""); setD((x) => ({ ...x, shocks: {}, horizon: 10, regime: "" })); setErr(null); }}>
+            <span className="block text-[12.5px] font-semibold">{preset.name}</span>
+            <span className="mt-1 block text-[11px] leading-relaxed text-tx3">{preset.text}</span>
+          </button>)}
+          <button type="button" disabled={busy || parsing} className={`rounded-lg border p-3 text-left transition ${!selectedPreset ? "border-cyan/50 bg-cyan/10" : "border-white/[.08] bg-white/[.02] hover:border-white/20"}`}
+            onClick={() => { setSelectedPreset(""); setText(""); setParsed(null); setLastParsed(""); setD((x) => ({ ...x, shocks: {}, horizon: 10, regime: "" })); setErr(null); }}>
+            <span className="block text-[12.5px] font-semibold">My own idea</span>
+            <span className="mt-1 block text-[11px] leading-relaxed text-tx3">Start with a blank description and choose your own market changes.</span>
+          </button>
+        </div>
+        <p className="mt-3 text-[11.5px] text-tx3" role="status">
           {selectedPreset
-            ? <>Starting from built-in template: <b className="text-cyan">{selectedPreset}</b>. You can edit it; this run will remain labeled as template-based.</>
-            : <>Starting from <b className="text-cyan">your custom input</b>. This run will be labeled as a custom Story Mode scenario.</>}
+            ? <>Example selected: <b className="text-cyan">{selectedPreset}</b>. You can edit the text and settings before creating the run.</>
+            : <>Your idea: describe a market event in your own words. Nothing runs until you choose Create scenario.</>}
         </p>
-        <textarea rows={4} value={text} onChange={(e) => { setText(e.target.value); setSelectedPreset(""); }} className="!text-[15px]" aria-label="Scenario description"
-          placeholder="NIFTY falls 15% over 10 trading days, the rupee depreciates by 4%, banking stocks experience elevated volatility, and crude oil increases 12%..." />
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button className="btn btn-ghost ml-auto" onClick={() => parse()} disabled={text.trim().length < 3}><Wand2 size={15} />Parse text</button></div>
-        {parsed && <div className="mt-3 rounded-xl border border-blue/25 bg-blue/5 p-3 text-[12.5px]"><b className="text-cyan">Interpreted as:</b> {parsed.found.length ? parsed.found.join(" · ") : "nothing recognised"}
-          {parsed.warnings.map((w: string) => <div key={w} className="mt-1 text-warn">{w}</div>)}{parsed.validation_errors.map((w: string) => <div key={w} className="mt-1 text-down">{w}</div>)}
-          {parsed.defaults_applied.horizon && <div className="mt-1 text-tx3">No horizon found — defaulting to 10 trading days (editable below).</div>}
-          <div className="mt-1 text-tx3">Rule-based interpretation. Edit any value below before generating; new text is interpreted automatically when you generate.</div></div>}
       </GlassCard>
-      <GlassCard title="2. Review scenario parameters" hint="Cumulative shocks over the horizon are probabilistic targets, not hard constraints. Leave a shock off to leave that asset unconstrained. USD/INR + means rupee depreciation.">
-        <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">{SHOCK_ASSETS.map((a) => { const v = d.shocks[a]; return (
-          <div key={a}><div className="mb-1 flex items-center justify-between"><label className="text-[12.5px]">{a === "NIFTY" ? "NIFTY cumulative shock" : a === "USDINR" ? "USD/INR shock" : `${LABEL[a]} shock`}</label>
-            <span className="flex items-center gap-2"><span className="num text-[12.5px] text-cyan">{v === undefined ? "free" : pct(v, 0)}</span>
-              {v !== undefined && <button className="text-[11px] text-tx3 hover:text-down" onClick={() => setShock(a, undefined)}>clear</button>}</span></div>
-            <input type="range" min={-0.4} max={a === "CRUDE" || a === "GOLD" ? 0.5 : 0.2} step={0.01} value={v ?? 0} onChange={(e) => setShock(a, +e.target.value)} aria-label={`${a} shock`} /></div>); })}</div>
-        <div className="mt-5 grid gap-4 sm:grid-cols-4">
-          <div><label className="lbl">Horizon (days)</label><select value={d.horizon} onChange={(e) => setD({ ...d, horizon: +e.target.value })}>{[5, 10, 15, 20].map((h) => <option key={h}>{h}</option>)}{![5, 10, 15, 20].includes(d.horizon) && <option>{d.horizon}</option>}</select></div>
-          <div><label className="lbl">Volatility regime</label><select value={d.regime} onChange={(e) => setD({ ...d, regime: e.target.value })}><option value="">Unspecified (historical mix)</option><option value="normal">Normal</option><option value="elevated">Elevated</option><option value="extreme">Extreme</option></select></div>
-          <div><label className="lbl">Scenarios (max 5,000)</label><select value={d.n} onChange={(e) => setD({ ...d, n: +e.target.value })}>{[1000, 2000, 5000].map((h) => <option key={h}>{h}</option>)}</select></div>
-          <div><label className="lbl">Simulation model</label><select value={d.model} onChange={(e) => setD({ ...d, model: e.target.value })} disabled={modelsQuery.isLoading || modelsQuery.isError || models.length === 0}>
-            {models.map((m) => <option key={m} value={m}>{MODEL_LABEL[m] ?? m}</option>)}
-          </select></div></div>
-        {modelsQuery.isError
-          ? <p className="mt-3 text-[12px] text-down">Could not load available models: {(modelsQuery.error as Error).message}</p>
-          : <p className="mt-3 text-[12px] text-tx3">{MODEL_DESCRIPTION[d.model] ?? ""} Every available model produces a saved run that appears in Scenario Explorer; the model changes the simulation method, not where the output is displayed.</p>}
-        {Object.keys(d.shocks).some((k) => d.shocks[k] !== undefined) && <p className="mt-3 text-[12px] text-tx3">Targets condition a proposal distribution and guide kernel-weighted selection. Paths are not modified; outcomes are not guaranteed. If the requested move is outside model support, the report shows the proposal range and attainment diagnostics.</p>}
-        <div className="mt-5 flex items-center gap-4"><button className="btn btn-primary" disabled={busy || modelsQuery.isLoading || modelsQuery.isError || models.length === 0} onClick={run}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}GENERATE SCENARIOS</button>
-          {busy && <div className="flex-1"><div className="h-1.5 overflow-hidden rounded bg-white/10"><div className="h-full bg-gradient-to-r from-blue to-cyan transition-all" style={{ width: `${Math.max(5, (job?.progress ?? 0) * 100)}%` }} /></div>
-            <div className="mt-1 text-[11.5px] text-tx3">{job ? `${job.status} · ${(job.progress * 100).toFixed(0)}%` : "submitting"}</div></div>}</div>
+      <GlassCard title="2. Describe what happens">
+        <label className="lbl" htmlFor="scenario-description">What changes in the market?</label>
+        <p className="mb-2 text-[11.5px] text-tx3">Helpful format: name an asset, say whether it rises or falls, give a percentage, and say over how many days. Example: “NIFTY falls 10% over 10 trading days.”</p>
+        <textarea id="scenario-description" rows={4} disabled={busy || parsing} value={text} onChange={(e) => { setText(e.target.value); setSelectedPreset(""); setParsed(null); setLastParsed(""); setErr(null); }}
+          className="!text-[15px]" aria-label="Scenario description"
+          placeholder="For example: NIFTY falls 10% over 10 days, banks fall 15%, and the rupee weakens 3%." />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[11px] text-tx3">CrashLab uses rule-based text matching. Always check the interpretation below.</span>
+          <button className="btn btn-ghost" onClick={() => parse()} disabled={text.trim().length < 3 || parsing || busy}>
+            {parsing ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}{parsing ? "Checking…" : "Check my description"}
+          </button>
+        </div>
+        {parsed && lastParsed === text && <div className="mt-3 rounded-xl border border-blue/25 bg-blue/5 p-3 text-[12.5px]">
+          <b className="text-cyan">Here’s what CrashLab understood</b>
+          {Object.keys(parsed.shocks).length
+            ? <ul className="mt-2 grid gap-1 sm:grid-cols-2">{Object.entries(parsed.shocks).map(([asset, value]) => <li key={asset}>{LABEL[asset] ?? asset}: <b>{pct(value as number, 0)} over {parsed.horizon ?? d.horizon} days</b></li>)}</ul>
+            : <p className="mt-1">No asset changes were identified. You can set them yourself in Step 3.</p>}
+          <p className="mt-1">Time period: <b>{parsed.horizon ?? d.horizon} trading days</b> · Market conditions: <b>{parsed.regime ?? "use a mix of historical conditions"}</b></p>
+          {parsed.warnings.map((w: string) => <div key={w} className="mt-2 text-warn">Please note: {w}</div>)}
+          {parsed.validation_errors.map((w: string) => <div key={w} className="mt-2 text-down">{w}</div>)}
+          <p className="mt-2 text-tx3">This is an interpretation, not a prediction. Change any setting below if it isn’t what you meant.</p>
+        </div>}
+      </GlassCard>
+      <GlassCard title="3. Review and adjust the market changes">
+        <p className="mb-1 text-[12.5px] text-tx2">These are total changes across the selected time period—not changes per day.</p>
+        <p className="mb-3 text-[11.5px] text-tx3">Leave a field blank to let that asset move freely. A negative number means it falls; a positive number means it rises. For USD/INR, a positive number means the rupee weakens.</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {SHOCK_ASSETS.map((a) => { const v = d.shocks[a]; return (
+            <label key={a} className="rounded-lg border border-white/[.08] bg-white/[.02] p-3">
+              <span className="block text-[12px] font-medium">{LABEL[a]}</span>
+              <span className="mt-1 block text-[10.5px] text-tx3">Optional total change</span>
+              <span className="mt-2 flex items-center gap-2">
+                <input className="num !py-1.5" type="number" min="-94" max="500" step="1" placeholder="Leave blank" disabled={busy} value={v === undefined ? "" : (v * 100).toFixed(0)}
+                  onChange={(e) => setShock(a, e.target.value === "" ? undefined : Number(e.target.value) / 100)} aria-label={`${LABEL[a]} total change percent`} />
+                <span className="text-[12px] text-tx3">%</span>
+                {v !== undefined && <button type="button" disabled={busy} className="text-[11px] text-tx3 hover:text-down" onClick={() => setShock(a, undefined)}>Clear</button>}
+              </span>
+            </label>); })}
+        </div>
+        <div className="mt-4 max-w-xs">
+          <label className="lbl" htmlFor="scenario-horizon">How long does the event last?</label>
+          <select id="scenario-horizon" value={d.horizon} disabled={busy} onChange={(e) => setD({ ...d, horizon: +e.target.value })}>{[5, 10, 15, 20].map((h) => <option key={h} value={h}>{h} trading days</option>)}</select>
+        </div>
+        <details className="mt-4 rounded-lg border border-white/[.08] p-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between text-[12px] font-medium">Advanced options <ChevronDown size={14} /></summary>
+          <p className="mt-2 text-[11.5px] text-tx3">The defaults are suitable for most users. Change these only if you know what you need.</p>
+          <div className="mt-3 grid gap-4 sm:grid-cols-3">
+            <div><label className="lbl" htmlFor="scenario-regime">Market volatility</label><select id="scenario-regime" value={d.regime} disabled={busy} onChange={(e) => setD({ ...d, regime: e.target.value })}><option value="">Mixed historical conditions</option><option value="normal">Calmer than usual</option><option value="elevated">More volatile</option><option value="extreme">Extremely volatile</option></select></div>
+            <div><label className="lbl" htmlFor="scenario-path-count">Number of possibilities</label><select id="scenario-path-count" value={d.n} disabled={busy} onChange={(e) => setD({ ...d, n: +e.target.value })}>{[1000, 2000, 5000].map((n) => <option key={n} value={n}>{n.toLocaleString()} paths</option>)}</select></div>
+            <div><label className="lbl" htmlFor="scenario-model">Simulation method</label><select id="scenario-model" value={d.model} onChange={(e) => setD({ ...d, model: e.target.value })} disabled={busy || modelsQuery.isLoading || modelsQuery.isError || models.length === 0}>
+              {models.map((m) => <option key={m} value={m}>{MODEL_LABEL[m] ?? m}{m === "cvae" ? " — recommended" : ""}</option>)}
+            </select></div>
+          </div>
+          {modelsQuery.isError
+            ? <p className="mt-3 text-[12px] text-down">Could not load simulation methods: {(modelsQuery.error as Error).message}</p>
+            : <p className="mt-3 text-[12px] text-tx3">{MODEL_DESCRIPTION[d.model] ?? ""} All methods create a saved result you can open in Scenario Explorer.</p>}
+          <p className="mt-2 text-[11px] text-tx3">More paths take longer to calculate. Volatility is how much prices move up or down. “Mixed historical conditions” uses the model’s usual mix.</p>
+        </details>
+        <div className="mt-5 rounded-lg border border-white/[.08] bg-white/[.02] p-3 text-[12px] text-tx2">
+          <b className="text-tx">Before you create it:</b> {Object.values(d.shocks).some((value) => value !== undefined)
+            ? `${Object.values(d.shocks).filter((value) => value !== undefined).length} market change(s) set over ${d.horizon} trading days.`
+            : "No specific asset changes set; the model will generate an unconditioned range of possibilities."}
+          {" "}These are requests to the model, not guaranteed outcomes. The results show what the simulation produced.
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <button className="btn btn-primary" disabled={busy || parsing || (text.trim().length > 0 && lastParsed !== text) || modelsQuery.isLoading || modelsQuery.isError || models.length === 0} onClick={run}>
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            {busy ? "Creating possibilities…" : `Create scenario · ${d.n.toLocaleString()} paths`}
+          </button>
+          {text.trim().length > 0 && lastParsed !== text && <span className="text-[11.5px] text-warn">First choose “Check my description” above and review what was understood.</span>}
+          {busy && <div className="min-w-[220px] flex-1"><div className="h-1.5 overflow-hidden rounded bg-white/10"><div className="h-full bg-gradient-to-r from-blue to-cyan transition-all" style={{ width: `${Math.max(5, (job?.progress ?? 0) * 100)}%` }} /></div>
+            <div className="mt-1 text-[11.5px] text-tx3">{job ? `Creating: ${job.status} · ${(job.progress * 100).toFixed(0)}%` : "Starting simulation…"}</div></div>}
+        </div>
       </GlassCard>
       {err != null && <ErrorState error={err} />}
     </div>);
