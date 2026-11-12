@@ -1,29 +1,35 @@
+
 services:
   - type: web
     name: crashlab-api
     runtime: docker
     dockerfilePath: backend/Dockerfile
     dockerContext: .
-    plan: 1c-2g
+    plan: free
     region: oregon
     healthCheckPath: /api/health
-    disk:
-      name: crashlab-simulations
-      mountPath: /data
-      sizeGB: 2
+
     envVars:
       - key: DATABASE_URL
         fromDatabase:
           name: crashlab-db
           property: connectionString
-      - { key: CORS_ORIGINS, sync: false }
-      - { key: ARTIFACT_URL, sync: false }
-      - { key: CRASHLAB_MAX_SCENARIOS, value: "5000" }
-      - { key: CRASHLAB_WORKERS, value: "1" }
+
+      - key: CORS_ORIGINS
+        sync: false
+
+      - key: ARTIFACT_URL
+        sync: false
+
+      - key: CRASHLAB_MAX_SCENARIOS
+        value: "5000"
+
+      - key: CRASHLAB_WORKERS
+        value: "1"
 
 databases:
   - name: crashlab-db
     databaseName: crashlab
     user: crashlab
-    plan: 0.5c-1g
+    plan: free
     region: oregon
