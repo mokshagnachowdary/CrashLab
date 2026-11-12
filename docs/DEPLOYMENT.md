@@ -1,8 +1,8 @@
 # Deployment guide
 
-> **Status: prepared, not deployed.** No GitHub remote has been added and no code has been pushed. The Render blueprint provisions the API, managed PostgreSQL, and persistent storage for simulation arrays. The frontend remains a separate Vercel deployment. Review current platform pricing and limits before creating resources.
+> **Status:** Deployment configuration is maintained in this repository; confirm the live service state and current platform limits in Render. The blueprint configures the API and managed PostgreSQL. The frontend remains a separate Vercel deployment.
 
-**Sizing note (measured):** the benchmark process peaked at ~1.3 GB RSS when generating 10,000-path pools with torch loaded. The Render API is configured with a 1 CPU / 2 GB instance, one worker, and a 5,000-scenario cap. The persistent disk and database are paid resources; simulation files can otherwise be lost on restart.
+**Sizing note (measured):** the benchmark process peaked at ~1.3 GB RSS when generating 10,000-path pools with torch loaded. The API caps scenario generation at 5,000 paths. Select a service plan with sufficient memory; simulation files under `/data` can otherwise be lost on restart.
 
 ## Local (Docker Compose)
 ```bash
@@ -13,9 +13,9 @@ cd .. && docker compose up --build            # UI http://localhost:8080  API ht
 Migrations run automatically at container start (`alembic upgrade head`).
 
 ## Cloud (Render API + Vercel frontend)
-1. **GitHub**: create an empty repository, then follow GitHub's setup instructions to add it as `origin` and push the `main` branch. Choose public/private access deliberately. The workflow at `.github/workflows/ci.yml` runs backend and frontend checks on pushes and pull requests. Do not commit `.env`, `.venv/`, `data/`, `node_modules/`, or model weights (`artifacts/*.pt`, `*.pkl`, `*.pth`, `*.ckpt`).
-2. **Model artifacts**: create `artifacts.tgz` with `tar czf artifacts.tgz -C artifacts cvae.pt baselines.pkl manifest.json research_results.json returns.csv benchmarks.json`, then upload it to a location that Render can download without interactive authentication (for example, a GitHub Release asset or object storage). Keep any signed URL private and set it only as the Render `ARTIFACT_URL` secret.
-3. **Render**: create a Blueprint from the GitHub repository and use the included `render.yaml`. It creates the API, managed PostgreSQL, and a 2 GB persistent disk mounted at `/data`. The API uses a 1 CPU / 2 GB instance, caps scenario generation at 5,000 paths, and runs one worker to keep memory use within the measured range. These are paid resources; review Render's current prices before confirming.
+1. **GitHub**: use the repository's `main` branch. The workflow at `.github/workflows/ci.yml` runs backend and frontend checks on pushes and pull requests. Do not commit `.env`, `.venv/`, `data/`, or `node_modules/`. The required model artifacts in `artifacts/` are tracked and copied into the Docker image.
+2. **Render**: create a Blueprint from the GitHub repository and use the included `render.yaml`. The Docker build context is the repository root, and the build fails if any required model artifact is missing. The image sets `CRASHLAB_ARTIFACT_DIR=/artifacts`; startup verifies the artifacts before migrations and application startup. `ARTIFACT_URL` remains an optional fallback for downloading a complete artifact bundle. Keep any signed URL private and set it only as the Render secret.
+3. **Storage and sizing**: the API stores its data under `/data` and caps scenario generation at 5,000 paths. Review the Render service and database plans and configure persistent storage if required by the deployment; simulation files can otherwise be lost on restart.
 4. During initial Blueprint setup, provide:
    - `ARTIFACT_URL`: the download URL for the model archive.
    - `CORS_ORIGINS`: the exact frontend origin, such as `https://<your-project>.vercel.app` (no trailing slash). Add custom domains as comma-separated origins without spaces.

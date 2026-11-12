@@ -11,6 +11,8 @@ data/
 *.db
 artifacts/*.pt
 artifacts/*.pkl
+!artifacts/cvae.pt
+!artifacts/baselines.pkl
 artifacts/*.pth
 artifacts/*.ckpt
 .pytest_cache/
