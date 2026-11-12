@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Calculator } from "lucide-react";
+import { ArrowRight, Calculator, CircleHelp } from "lucide-react";
 import { ASSETS, LABEL, MODEL_LABEL, api, money, pct, pctU, post, useScenarios } from "../api";
 import { Disclaimer, Empty, ErrorState, GlassCard, Metric, PageIntro, Skeleton, useToast } from "../components/ui";
 import { Donut, FanChart, HBar, Histogram, PIE_COLORS, C } from "../components/charts";
@@ -18,46 +18,71 @@ export function useStress(simId: string | undefined, weights: Record<string, num
 }
 
 export default function Portfolio() {
-  const { simId, weights, setWeights, v0, setV0 } = useApp(); const toast = useToast();
+  const { simId, setSimId, weights, setWeights, v0, setV0 } = useApp(); const toast = useToast();
   const [draft, setDraft] = useState<Record<string, number>>({ ...DEFAULT_W, ...weights }); const [v, setV] = useState(v0);
   const list = useScenarios(); const done = (list.data ?? []).filter((x: any) => x.status === "completed");
-  const sim = simId ?? done[0]?.id; const st = useStress(sim, weights, v0);
+  const sim = done.some((scenario: any) => scenario.id === simId) ? simId : done[0]?.id;
+  const st = useStress(sim, weights, v0);
   const activeScenario = done.find((scenario: any) => scenario.id === sim);
   const total = Object.values(draft).reduce((a, b) => a + b, 0);
+  const previewWeights = normW(draft);
+  const hasDraftChanges = JSON.stringify(normW(draft)) !== JSON.stringify(normW(weights)) || v !== v0;
   const cmp = useQuery({ queryKey: ["cmp-sims", done.slice(0, 4).map((d: any) => d.id).join(), JSON.stringify(normW(weights)), v0], enabled: done.length > 1,
     queryFn: async () => { const p = await post("/api/portfolios", { name: "cmp", weights: normW(weights), initial_value: v0, normalize: true });
       return Promise.all(done.slice(0, 4).map(async (d: any) => ({ d, r: await post(`/api/portfolios/${p.id}/stress-test`, { simulation_id: d.id }) }))); } });
-  const apply = () => { if (total <= 0) return toast("Weights must sum to a positive number", "err"); if (v <= 0) return toast("Portfolio value must be positive", "err"); setWeights(draft); setV0(v); };
+  const apply = () => {
+    if (total <= 0 || !Number.isFinite(total)) return toast("Add a positive allocation to at least one holding.", "err");
+    if (Object.values(draft).some((value) => !Number.isFinite(value) || value < 0)) return toast("Allocation values must be zero or more.", "err");
+    if (v <= 0 || !Number.isFinite(v)) return toast("Portfolio value must be a positive number.", "err");
+    setWeights(draft); setV0(v);
+  };
   const m = st.data?.metrics, w = normW(weights);
   const var95 = m?.var_95, var99 = m?.var_99;
   return (
     <div className="space-y-4">
       <PageIntro
         title="Portfolio Risk"
-        description="Understand how your asset mix could lose value under the scenarios you generate, with plain-language explanations around each risk metric."
+        description="See how a chosen mix of holdings performed across the simulated paths of one selected scenario. Nothing here is a forecast."
       />
+      <section className="glass grid gap-4 p-4 md:grid-cols-[1fr_auto] md:items-center md:p-5">
+        <div><p className="lbl">What this page does</p><p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-tx2">Set the share of your example portfolio in each asset, choose a saved simulation, and compare the resulting range of gains and losses. The results only describe that model run and those assumptions.</p></div>
+        <Link to="/story" className="inline-flex items-center gap-1 text-[12px] text-cyan">Create a different scenario <ArrowRight size={13} /></Link>
+      </section>
       <div className="grid gap-4 lg:grid-cols-3">
-        <GlassCard title="Portfolio allocation" hint="Long-only, buy-and-hold over the horizon, cash earns 0%. Gold & crude are futures-return proxies, USD/INR is a long-USD position." className="lg:col-span-1">
+        <GlassCard title="1. Set your example portfolio" hint="Enter percentages for each holding. CrashLab normalises the mix to 100% for calculations; these are research inputs, not a brokerage account." className="lg:col-span-1">
+          <div className="mb-3 rounded-lg bg-white/[.025] p-3 text-[11.5px] leading-relaxed text-tx2"><b className="text-tx">How to use this:</b> Increase a holding to give it more influence on the portfolio result. Cash is assumed not to change value. Gold and crude are price-return proxies; USD/INR represents a long-USD exposure.</div>
           <div className="space-y-2.5">{KEYS.map((k) => (<div key={k} className="grid grid-cols-[88px_1fr_54px] items-center gap-3"><span className="text-[12.5px]">{k === "CASH" ? "Cash" : LABEL[k]}</span>
-            <input type="range" min={0} max={100} step={1} value={draft[k] ?? 0} onChange={(e) => setDraft({ ...draft, [k]: +e.target.value })} aria-label={`${k} weight`} />
-            <input className="num !px-1.5 !py-1 text-right" type="number" min={0} max={100} value={draft[k] ?? 0} onChange={(e) => setDraft({ ...draft, [k]: Math.max(0, +e.target.value) })} /></div>))}</div>
-          <div className="mt-3 flex items-center justify-between text-[12.5px]"><span>Sum</span><span className={`num ${Math.abs(total - 100) < 0.01 ? "text-up" : "text-warn"}`}>{total.toFixed(1)}%{Math.abs(total - 100) >= 0.01 && " → will be normalised"}</span></div>
-          <div className="mt-3"><label className="lbl">Initial portfolio value</label><input type="number" min={1} value={v} onChange={(e) => setV(+e.target.value)} className="num" /></div>
-          <button className="btn btn-primary mt-4 w-full justify-center" onClick={apply}><Calculator size={15} />Apply &amp; stress test</button>
-          <div className="mt-4 text-[11.5px] text-tx3">Allocation chart: each slice is an asset’s share of the portfolio after weights are normalised to 100%.</div>
-          <div className="mt-2 grid grid-cols-[130px_1fr] items-center gap-3"><Donut height={130} data={Object.entries(w).map(([k, x]) => ({ name: k === "CASH" ? "Cash" : LABEL[k], v: x }))} />
-            <ul className="space-y-1 text-[11.5px]">{Object.entries(w).map(([k, x], i) => <li key={k} className="flex items-center justify-between gap-2"><span className="flex items-center gap-1.5 text-tx2"><span className="h-2 w-2 rounded-full" style={{ background: PIE_COLORS[i % 7] }} />{k === "CASH" ? "Cash" : LABEL[k]}</span><span className="num">{pctU(x, 1)}</span></li>)}</ul></div>
+            <input type="range" min={0} max={100} step={1} value={Math.min(100, draft[k] ?? 0)} onChange={(e) => setDraft({ ...draft, [k]: +e.target.value })} aria-label={`${k} weight`} />
+            <input className="num !px-1.5 !py-1 text-right" type="number" min={0} value={draft[k] ?? 0} onChange={(e) => setDraft({ ...draft, [k]: e.target.value === "" ? 0 : +e.target.value })} /></div>))}</div>
+          <div className="mt-3 flex items-center justify-between text-[12.5px]"><span>Entered total</span><span className={`num ${Math.abs(total - 100) < 0.01 ? "text-up" : "text-warn"}`}>{total.toFixed(1)}%</span></div>
+          <p className="mt-1 text-[11px] leading-relaxed text-tx3">{Math.abs(total - 100) < .01 ? "Your entries add to 100%." : `The preview below converts your ${total.toFixed(1)}% total into a 100% mix before calculating results.`}</p>
+          <div className="mt-3"><label className="lbl" htmlFor="portfolio-value">Example starting value</label><p className="mb-1 text-[11px] text-tx3">The amount used to translate percentage outcomes into currency.</p><input id="portfolio-value" type="number" min={1} value={v} onChange={(e) => setV(e.target.value === "" ? 0 : +e.target.value)} className="num" /></div>
+          <button className="btn btn-primary mt-4 w-full justify-center" onClick={apply}><Calculator size={15} />{hasDraftChanges ? "Update portfolio & recalculate" : "Recalculate with saved mix"}</button>
+          {hasDraftChanges && <p className="mt-2 text-center text-[11px] text-warn">Results still use the saved mix until you update it.</p>}
+          <div className="mt-4 border-t border-white/[.07] pt-3">
+            <p className="text-[11.5px] font-semibold">Preview of the mix used after updating</p>
+            <div className="mt-2 grid grid-cols-[110px_1fr] items-center gap-2"><Donut height={120} data={Object.entries(previewWeights).map(([k, x]) => ({ name: k === "CASH" ? "Cash" : LABEL[k], v: x }))} />
+              <ul className="space-y-1 text-[11px]">{Object.entries(previewWeights).map(([k, x], i) => <li key={k} className="flex items-center justify-between gap-2"><span className="flex items-center gap-1.5 text-tx2"><span className="h-2 w-2 rounded-full" style={{ background: PIE_COLORS[i % 7] }} />{k === "CASH" ? "Cash" : LABEL[k]}</span><span className="num">{pctU(x, 1)}</span></li>)}</ul></div>
+          </div>
         </GlassCard>
         <div className="space-y-4 lg:col-span-2">
           {!sim ? <Empty text="Generate a scenario first — risk metrics are computed from its simulated paths." action={<Link to="/story" className="btn btn-primary">Open Story Mode</Link>} /> :
             st.isError ? <ErrorState error={st.error} /> : !m ? <Skeleton h={220} /> : <>
+              <section className="rounded-xl border border-cyan/20 bg-cyan/[.035] p-4">
+                <p className="lbl">2. Choose the saved simulation for these results</p>
+                <label htmlFor="portfolio-scenario" className="sr-only">Choose a completed scenario</label>
+                <select id="portfolio-scenario" className="mt-2" value={sim} onChange={(event) => setSimId(event.target.value)} aria-label="Choose scenario for portfolio risk">
+                  {done.map((scenario: any) => <option key={scenario.id} value={scenario.id}>{scenario.name} · {scenario.request.source === "preset" ? "example" : scenario.request.source === "custom" ? "your scenario" : "saved run"} · {new Date(scenario.created_at).toLocaleDateString()}</option>)}
+                </select>
+                <p className="mt-2 text-[11px] text-tx3">Changing the scenario recalculates the charts and risk figures below using the saved portfolio mix.</p>
+              </section>
               <p className="rounded-lg border border-white/[.07] bg-white/[.025] p-3 text-[12px] text-tx2">
                 <b className="text-tx">Scenario used for every risk chart below:</b> {activeScenario?.name ?? sim}
                 {activeScenario && <> · {activeScenario.request.source === "preset" ? `built-in template: ${activeScenario.request.preset_name ?? activeScenario.name}` : activeScenario.request.source === "custom" ? "custom Story Mode input" : "older run; origin unknown"} · {MODEL_LABEL[activeScenario.request.model]}</>}
                 {" · "}{m.n_scenarios.toLocaleString()} paths · {m.horizon_days}-day horizon · initial value {money(m.v0)}.
                 {" "}The graphs compare portfolio outcomes across those simulated paths, not predicted market outcomes.
               </p>
-              <div className="mb-2 text-[12px] text-tx2"><b className="text-tx">In plain English:</b> “95% loss threshold” is a loss level that 95 out of 100 simulated paths did not exceed. “Average of worst 5%” tells you how large losses were in the roughest paths. Neither is a prediction.</div>
+              <div className="mb-2 flex items-start gap-2 rounded-lg border border-white/[.07] bg-white/[.02] p-3 text-[12px] leading-relaxed text-tx2"><CircleHelp size={15} className="mt-0.5 shrink-0 text-cyan" /><p><b className="text-tx">3. Read the results:</b> “Loss threshold (95% of paths)” is the loss boundary for 95 of 100 simulated paths. “Average loss in worst 5%” is the average across the roughest paths. These are conditional model results—not odds of a real-world event.</p></div>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                 <Metric label="Loss threshold (95% of paths)" value={pctU(m.var_95)} sub={money(m.var_95_amount)} tone="warn" tip="95% of simulated paths had a loss below this amount; 5% lost more." />
                 <Metric label="Loss threshold (99% of paths)" value={pctU(m.var_99)} sub={money(m.var_99_amount)} tone="bad" tip="99% of simulated paths had a loss below this amount; 1% lost more." />

@@ -2,10 +2,10 @@ import { ReactNode, createContext, useCallback, useContext, useState } from "rea
 import { AlertTriangle, Inbox, Info } from "lucide-react";
 
 export const GlassCard = ({ title, hint, right, children, className = "" }: { title?: string; hint?: string; right?: ReactNode; children: ReactNode; className?: string }) => (
-  <section className={`glass p-4 fade ${className}`}>
+  <section className={`glass min-w-0 p-4 fade ${className}`}>
     {(title || right) && (
-      <header className="mb-3 flex items-start justify-between gap-3">
-        <div><h3 className="text-[13px] font-semibold text-tx">{title}</h3>{hint && <p className="mt-0.5 text-[11.5px] text-tx3">{hint}</p>}</div>{right}
+      <header className="mb-3 flex min-h-[2.5rem] min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1"><h3 className="text-[13px] font-semibold text-tx">{title}</h3>{hint && <p className="mt-0.5 text-[11.5px] leading-relaxed text-tx3">{hint}</p>}</div>{right && <div className="max-w-full min-w-0">{right}</div>}
       </header>)}
     {children}
   </section>

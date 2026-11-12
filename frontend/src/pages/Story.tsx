@@ -86,7 +86,7 @@ export default function Story() {
       });
       for (let i = 0; i < 900; i++) {
         const j = await api(`/api/scenarios/${r.id}`, undefined); setJob(j);
-        if (j.status === "completed") { setSimId(j.id); toast("Scenarios generated"); nav(`/explorer?sim=${j.id}`); return; }
+        if (j.status === "completed") { setSimId(j.id); toast("Scenarios generated"); nav(`/explorer?sim=${j.id}`, { state: { createdScenario: true } }); return; }
         if (j.status === "failed") throw new Error(j.error);
         await new Promise((res) => setTimeout(res, 500));
       }
@@ -111,9 +111,12 @@ export default function Story() {
       <SyntheticBanner synthetic={ov.data?.synthetic} />
       <GlassCard title="What should happen to the market?">
         <p className="mb-2 text-[12px] text-tx2">Write a sentence, or start with an example. You can change anything before running it.</p>
-        <textarea id="scenario-description" rows={3} disabled={busy} value={text} onChange={(e) => { setText(e.target.value); setSelectedPreset(""); setErr(null); }}
+        <textarea id="scenario-description" rows={3} maxLength={1000} disabled={busy} value={text} onChange={(e) => { setText(e.target.value); setSelectedPreset(""); setErr(null); }}
           className="!text-[15px]" aria-label="Scenario description"
           placeholder="For example: NIFTY falls 10% over 10 days and the rupee weakens 3%." />
+        <div className="mt-1 flex justify-end" aria-live="polite">
+          <span className={`num text-[10.5px] ${text.length >= 950 ? "text-warn" : "text-tx3"}`}>{text.length.toLocaleString()} / 1,000 characters</span>
+        </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-[10.5px] text-tx3">Try:</span>
           {PRESETS.slice(0, 4).map((preset) => <button key={preset.name} type="button" disabled={busy}

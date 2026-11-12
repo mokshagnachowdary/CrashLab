@@ -38,4 +38,4 @@ input[type=range] { padding: 0; accent-color: var(--accent-cyan); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 .recharts-responsive-container { background: #090910; border: 1px solid rgba(125,110,190,.12); border-radius: 8px; }
 .recharts-tooltip-wrapper { outline: none; }
-table { width: 100%; border-collapse: collapse; } th { text-align: left; } th, td { padding: 7px 8px; border-bottom: 1px solid var(--border-subtle); font-size: 12px; }
+table { width: 100%; border-collapse: collapse; } th { text-align: left; } th, td { padding: 7px 8px; border-bottom: 1px solid var(--border-subtle); font-size: 12px; vertical-align: middle; }
