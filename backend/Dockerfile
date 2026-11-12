@@ -4,6 +4,7 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 COPY backend/requirements-prod.txt .
 RUN pip install --no-cache-dir -r requirements-prod.txt
 COPY backend/ .
+COPY artifacts/ /artifacts/
 # Model artifacts are NOT baked into git; mount ./artifacts or set ARTIFACT_URL (see docs/DEPLOYMENT.md)
 ENV PYTHONPATH=/app \
     CRASHLAB_HOME=/app \
