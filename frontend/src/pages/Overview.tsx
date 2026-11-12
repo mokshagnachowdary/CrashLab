@@ -49,9 +49,9 @@ export default function Overview() {
       <div className="grid gap-4 lg:grid-cols-3">
         <GlassCard title="Portfolio stress" hint={latest ? `Expected Shortfall for your saved portfolio weights on the latest completed run, “${latest.name}”.` : "Run a scenario to populate"}>
           {!latest ? <Empty text="No completed simulation yet." action={<Link className="btn btn-primary" to="/story">Create scenario</Link>} /> : !m ? <Skeleton h={190} /> : <>
-            <Gauge value={m.es_95 / 0.3} label={pctU(m.es_95)} sub="Expected Shortfall 95%" danger={m.es_95 > 0.1} />
+            <Gauge value={m.es_95 / 0.3} label={pctU(m.es_95)} sub="Average loss in the worst 5%" danger={m.es_95 > 0.1} />
             <div className="num mt-3 grid grid-cols-2 gap-2 text-[12.5px]"><div><span className="lbl block">Portfolio value</span>{money(v0)}</div><div><span className="lbl block">Median return</span><span className={m.median_return < 0 ? "text-down" : "text-up"}>{pct(m.median_return)}</span></div></div>
-            <p className="mt-2 text-[11px] text-tx3">Gauge scales ES against a 30% reference for display only; it is not a probability.</p></>}
+            <p className="mt-2 text-[11px] text-tx3">This is the average loss in the roughest 5 out of 100 simulated paths for “{latest.name}”. The arc uses 30% loss as a visual reference; it is not a probability or a prediction.</p></>}
         </GlassCard>
         <GlassCard title="Simulation activity" hint="Counts and run details describe completed local simulations. The bars show generated path counts, oldest on the left and newest on the right.">
           {sc.isLoading ? <Skeleton h={150} /> : <div className="grid grid-cols-2 gap-3 text-[12.5px]">

@@ -57,23 +57,26 @@ export default function Portfolio() {
                 {" · "}{m.n_scenarios.toLocaleString()} paths · {m.horizon_days}-day horizon · initial value {money(m.v0)}.
                 {" "}The graphs compare portfolio outcomes across those simulated paths, not predicted market outcomes.
               </p>
+              <div className="mb-2 text-[12px] text-tx2"><b className="text-tx">In plain English:</b> “95% loss threshold” is a loss level that 95 out of 100 simulated paths did not exceed. “Average of worst 5%” tells you how large losses were in the roughest paths. Neither is a prediction.</div>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                <Metric label="VaR 95%" value={pctU(m.var_95)} sub={money(m.var_95_amount)} tone="warn" tip="95th percentile of simulated horizon loss" />
-                <Metric label="VaR 99%" value={pctU(m.var_99)} sub={money(m.var_99_amount)} tone="bad" />
-                <Metric label="ES 95%" value={pctU(m.es_95)} sub={money(m.es_95_amount)} tone="warn" tip="Mean loss in the worst 5% of scenarios" />
-                <Metric label="ES 99%" value={pctU(m.es_99)} sub={money(m.es_99_amount)} tone="bad" />
-                <Metric label="Max drawdown (worst path)" value={pctU(m.max_drawdown_worst)} sub={`mean ${pctU(m.max_drawdown_mean)} · p95 ${pctU(m.max_drawdown_p95)}`} tone="bad" />
-                <Metric label="Median return" value={pct(m.median_return)} sub={`worst ${pct(m.worst_return)}`} tone={m.median_return < 0 ? "bad" : "good"} /></div>
+                <Metric label="Loss threshold (95% of paths)" value={pctU(m.var_95)} sub={money(m.var_95_amount)} tone="warn" tip="95% of simulated paths had a loss below this amount; 5% lost more." />
+                <Metric label="Loss threshold (99% of paths)" value={pctU(m.var_99)} sub={money(m.var_99_amount)} tone="bad" tip="99% of simulated paths had a loss below this amount; 1% lost more." />
+                <Metric label="Average loss in worst 5%" value={pctU(m.es_95)} sub={money(m.es_95_amount)} tone="warn" tip="Average loss among the 5% most damaging simulated paths." />
+                <Metric label="Average loss in worst 1%" value={pctU(m.es_99)} sub={money(m.es_99_amount)} tone="bad" tip="Average loss among the 1% most damaging simulated paths." />
+                <Metric label="Largest peak-to-bottom fall" value={pctU(m.max_drawdown_worst)} sub={`average ${pctU(m.max_drawdown_mean)} · 95th percentile ${pctU(m.max_drawdown_p95)}`} tone="bad" />
+                <Metric label="Middle outcome" value={pct(m.median_return)} sub={`worst path ${pct(m.worst_return)}`} tone={m.median_return < 0 ? "bad" : "good"} tip="Half the simulated paths finished above this return and half below." /></div>
               <div className="grid grid-cols-3 gap-3">{[["> 5%", m.prob_loss_gt_5], ["> 10%", m.prob_loss_gt_10], ["> 20%", m.prob_loss_gt_20]].map(([l, p]: any) => <Metric key={l} label={`Share of paths, loss ${l}`} value={pctU(p)} tip="Fraction of this simulation's paths, conditional on the scenario — not a real-world probability" />)}</div></>}
         </div></div>
       {m && <>
         <div className="grid gap-4 lg:grid-cols-2">
-          <GlassCard title="Portfolio loss distribution" hint="Loss = (V₀ − V_T)/V₀. Red bars = the Expected-Shortfall region (beyond VaR 95%); ES is the mean loss inside it."><Histogram counts={st.data.loss_hist.counts} edges={st.data.loss_hist.edges} tailFrom={var95} height={280} fmt={(v) => pctU(v, 0)}
+          <GlassCard title="How much could the portfolio lose by the end?" hint="Each bar counts simulated outcomes. The markers show the middle result, loss thresholds, and average loss among the roughest paths."><Histogram counts={st.data.loss_hist.counts} edges={st.data.loss_hist.edges} tailFrom={var95} height={280} fmt={(v) => pctU(v, 0)}
             markers={[{ x: m.median_return * -1, label: "median", color: C.cyan }, { x: var95, label: "VaR95", color: C.warn }, { x: var99, label: "VaR99", color: C.purple }, { x: m.es_95, label: "ES95", color: C.pink }].filter((x) => x.x >= st.data.loss_hist.edges[0] && x.x <= st.data.loss_hist.edges.at(-1))} /></GlassCard>
-          <GlassCard title="Portfolio value through time" hint="Quantile bands show the cumulative portfolio return by day across paths from the selected scenario. The median is typical within this simulation; wider bands mean more dispersion. These are conditional model outputs, not confidence guarantees or forecasts."><FanChart bands={Object.fromEntries(Object.entries(st.data.value_bands).map(([k, a]: any) => [k, a.map((x: number) => x / m.v0 - 1)]))} height={280} /></GlassCard></div>
+          <GlassCard title="How could my portfolio change over time?"><FanChart bands={Object.fromEntries(Object.entries(st.data.value_bands).map(([k, a]: any) => [k, a.map((x: number) => x / m.v0 - 1)]))} height={280}
+            guide="The bright line shows the middle simulated portfolio return on each day. The shaded area shows the range of outcomes across paths. Below zero means the portfolio is worth less than at the start; wider shading means outcomes vary more. This is not a forecast." /></GlassCard></div>
         <div className="grid gap-4 lg:grid-cols-3">
-          <GlassCard title="Loss contribution — worst 5% of paths" hint="Average contribution of each asset to portfolio loss among the worst 5% of simulated outcomes. Contributions sum to ES 95%; a negative bar means that asset gained value on average in those worst paths. Use this to see which holdings drive tail loss.">
-            <HBar data={ASSETS.map((a) => ({ name: a, v: st.data.contributions_es95[a] })).filter((d) => Math.abs(d.v) > 1e-9).sort((a, b) => b.v - a.v)} /></GlassCard>
+          <GlassCard title="Which holdings drive the biggest losses?">
+            <HBar data={ASSETS.map((a) => ({ name: a, v: st.data.contributions_es95[a] })).filter((d) => Math.abs(d.v) > 1e-9).sort((a, b) => b.v - a.v)} xLabel="Share of total portfolio loss"
+              guide="Bars show each holding’s average share of the portfolio loss in the worst 5% of simulated outcomes. Longer bars mean a larger contribution to loss; a bar extending the other way means that holding offset some losses." /></GlassCard>
           <GlassCard title="Worst scenarios" hint="The five paths with the largest portfolio losses under the selected run. Path index refers to the exported simulation path list; final value is measured from the initial portfolio value shown above.">
             <table className="num"><thead><tr className="lbl"><th>Path index</th><th>Loss</th><th>Final value</th></tr></thead><tbody>{st.data.worst_scenarios.map((s: any) => <tr key={s.index}><td>{s.index}</td><td className="text-down">{pctU(s.loss_pct)}</td><td>{money(s.final_value)}</td></tr>)}</tbody></table></GlassCard>
           <GlassCard title="Scenario comparison" hint="Expected Shortfall and median return for the same portfolio across recent completed runs. ES95 summarizes average loss in each run’s worst 5%; compare to understand how scenario assumptions change risk.">

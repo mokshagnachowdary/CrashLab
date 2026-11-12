@@ -146,12 +146,13 @@ export default function Explorer() {
           : " No asset return targets were requested; this is an unconditional simulation."}
         {" "}The graphs below summarize this run’s outputs; they are conditional model simulations, not forecasts.
       </div>
-      <GlassCard title={`${LABEL[tab]} — cumulative return fan`} right={<Tabs items={[...ASSETS, "PORTFOLIO"] as const} value={tab as any} onChange={setTab} labels={LABEL} />}
-        hint={`Each line/band shows cumulative return for ${LABEL[tab]} over time across this run’s simulated paths. Dark = 25–75%, medium = 5–95%, light = 1–99%; cyan = median. It helps show both the typical path and uncertainty. This is not a forecast.`}>
-        {bands ? <><FanChart bands={bands} history={tab === "PORTFOLIO" ? undefined : hist.data?.path} />{hist.data && tab !== "PORTFOLIO" && <p className="mt-1 text-[11.5px] text-tx3"><span className="text-warn">- - -</span> Worst {hz}-day window in the historical data for this asset ({hist.data.start} → {hist.data.end}), shown for reference only.</p>}</> : tab === "PORTFOLIO" && stress.isError ? <ErrorState error={stress.error} /> : <Skeleton h={340} />}
+      <GlassCard title={`How might ${LABEL[tab]} move in this scenario?`} right={<div><span className="mb-1 block text-right text-[10px] text-tx3">Choose what to follow</span><Tabs items={[...ASSETS, "PORTFOLIO"] as const} value={tab as any} onChange={setTab} labels={LABEL} /></div>}>
+        {bands ? <><FanChart bands={bands} history={tab === "PORTFOLIO" ? undefined : hist.data?.path}
+          guide={`This chart follows ${LABEL[tab]} through the selected scenario. The bright line is the middle result; the shaded areas show how far different simulated outcomes spread. If the middle line is below zero, the typical simulated path loses value. A wider shaded area means less certainty about the outcome.`} />
+          {hist.data && tab !== "PORTFOLIO" && <p className="mt-1 text-[11.5px] text-tx3"><span className="text-warn">- - -</span> For context only: the worst historical {hz}-day move in the available data ({hist.data.start} → {hist.data.end}). This is one past period, not a prediction.</p>}</> : tab === "PORTFOLIO" && stress.isError ? <ErrorState error={stress.error} /> : <Skeleton h={340} />}
       </GlassCard>
       <div className="grid gap-4 lg:grid-cols-3">
-        <GlassCard title="Scenario constraint satisfaction" hint="Requested vs realised — measured, never forced" className="lg:col-span-2">
+        <GlassCard title="Did the simulation reach the requested changes?" hint="Targets are requests, not promises. These results show what the model actually produced. The paths are never edited to force a match." className="lg:col-span-2">
           {!m.constraint_report.length ? <p className="text-tx2 text-[13px]">Unconditional run — no constraints requested.</p> :
             <div className="overflow-x-auto"><table className="num"><thead><tr className="lbl"><th>Asset</th><th>Requested target</th><th>Realised median (sampling 95% CI)</th><th>Predictive interval (5–95%)</th><th>Within tolerance (Wilson 95% CI)</th><th>Violations</th></tr></thead><tbody>
               {m.constraint_report.map((r: any) => (<tr key={r.asset}>
@@ -163,15 +164,16 @@ export default function Explorer() {
                   {pctU(r.share_within_tolerance, 0)}{r.share_within_tolerance_ci95 && <span className="block text-[10px] text-tx3">{pctU(r.share_within_tolerance_ci95[0], 0)} … {pctU(r.share_within_tolerance_ci95[1], 0)}</span>}</td>
                 <td>{r.violation_count ?? "—"}{r.violation_rate !== undefined && <span className="block text-[10px] text-tx3">{pctU(r.violation_rate, 0)}</span>}</td>
               </tr>))}</tbody></table>
-              <p className="mt-2 text-[11.5px] text-tx3">Mode: <b>{m.conditioning}</b>{m.proposal_pool_size && ` · ${m.proposal_pool_size.toLocaleString()} proposals · kernel ESS ${Math.round(m.kernel_effective_sample_size).toLocaleString()}`}. Targets are probabilistic, not hard constraints; each selected path is unchanged. Tolerance: ±max(1pp, 15% of target) in log return.</p>
+              <p className="mt-2 text-[11.5px] text-tx3">“Realised middle” is the middle outcome the simulation produced. “Within target” is the share of paths close to what you asked for; the small range below it shows uncertainty from the finite number of paths. A target can be missed when it is unusual for the data or model. No path is changed to force a match.</p>
               {m.constraint_report.map((r: any) => r.diagnostics?.map((message: string) => <p key={`${r.asset}-${message}`} className="mt-1 text-[11.5px] text-warn">{LABEL[r.asset]}: {message}</p>))}</div>}
         </GlassCard>
-        <GlassCard title="Joint tail exceedance" hint="For this run, the share of paths where each asset is in its own worst 5% return tail, given NIFTY is also in its worst 5%. Higher values indicate more frequent co-stress in these simulated paths, not real-world odds.">
-          <HBar data={ASSETS.filter((a) => a !== "NIFTY").map((a) => ({ name: a, v: S.joint_tail_given_nifty[a] }))} fmt={(v) => pctU(v, 0)} color={C.cyan} height={200} /></GlassCard></div>
+        <GlassCard title="When NIFTY falls sharply, what else falls?" hint="Looks only at this scenario’s simulated paths. It counts how often another asset also has a very bad result when NIFTY is among its worst outcomes.">
+          <HBar data={ASSETS.filter((a) => a !== "NIFTY").map((a) => ({ name: a, v: S.joint_tail_given_nifty[a] }))} fmt={(v) => pctU(v, 0)} color={C.cyan} height={200}
+            guide="Longer bars mean that asset landed among its worst outcomes more often in paths where NIFTY also did badly. This describes the simulation only; it is not the chance of a real market event." /></GlassCard></div>
       {fin && <div className="grid gap-4 lg:grid-cols-2">
-        <GlassCard title={`${LABEL[tab]} — horizon return distribution`} hint={`Each bar counts this run’s paths ending in the return range shown on the x-axis for ${LABEL[tab]}. The distribution shows spread and skew; the amber bars mark negative returns.`}><Histogram counts={fin.counts} edges={fin.edges} neg /></GlassCard>
-        <GlassCard title="Worst NIFTY paths" hint={`The 15 paths with the lowest final NIFTY return from this run, plotted for ${LABEL[tab]}. Compare how losses build over time; the colored lines are individual simulated paths, not confidence bands.`}><PathsChart paths={S.worst_paths_nifty.paths[tab]} /></GlassCard></div>}
-      <GlassCard title="Cross-asset correlation (horizon returns, generated)" hint="Each cell is the correlation between two assets’ cumulative horizon returns across paths in this run. Positive values move together; negative values move in opposite directions. Correlation is not causation.">
+        <GlassCard title={`How did ${LABEL[tab]} finish?`}><Histogram counts={fin.counts} edges={fin.edges} neg /></GlassCard>
+        <GlassCard title={`Other assets along NIFTY’s 15 worst paths`}><PathsChart paths={S.worst_paths_nifty.paths[tab]} /></GlassCard></div>}
+      <GlassCard title="Which assets moved together in this scenario?">
         <Heatmap labels={[...ASSETS]} m={S.corr} /></GlassCard>
     </div>);
 }
