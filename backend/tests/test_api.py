@@ -17,6 +17,26 @@ def client(tmp_path_factory):
     (config.DATA_DIR / "simulations").mkdir(parents=True, exist_ok=True)
     return TestClient(api.app)
 
+def test_cors_preflight_and_frontend_gets(client):
+    origin = "https://crashlab-qrqs.onrender.com"
+    preflight = client.options("/api/health", headers={
+        "Origin": origin,
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "content-type,authorization",
+    })
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == origin
+    assert "GET" in preflight.headers["access-control-allow-methods"]
+    assert "POST" in preflight.headers["access-control-allow-methods"]
+    assert "authorization" in preflight.headers["access-control-allow-headers"].lower()
+    assert "content-type" in preflight.headers["access-control-allow-headers"].lower()
+    assert preflight.headers.get("access-control-allow-credentials") != "true"
+
+    for path in ("/api/health", "/api/data/overview", "/api/scenarios?limit=20"):
+        response = client.get(path, headers={"Origin": origin})
+        assert response.status_code == 200, (path, response.text)
+        assert response.headers["access-control-allow-origin"] == origin
+
 def test_full_workflow(client):
     import time
     h = client.get("/api/health").json(); assert h["api"] == "ok" and h["models_loaded"]

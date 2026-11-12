@@ -26,8 +26,22 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format='{"t":"%(asctim
 log = logging.getLogger("crashlab")
 app = FastAPI(title="CRASHLAB API", version="1.0.0",
               description="Generative financial stress testing. Research/education tool — not investment advice.")
-app.add_middleware(CORSMiddleware, allow_origins=[o for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o],
-                   allow_methods=["*"], allow_headers=["*"])
+DEFAULT_CORS_ORIGINS = {
+    "http://localhost:5173",
+    "https://crashlab-qrqs.onrender.com",
+}
+configured_cors_origins = {
+    origin.strip().rstrip("/")
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=sorted(DEFAULT_CORS_ORIGINS | configured_cors_origins),
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Accept", "Authorization", "Content-Type", "Origin", "X-Requested-With"],
+    allow_credentials=False,
+)
 STATE = service.State()
 POOL = ThreadPoolExecutor(max_workers=int(os.getenv("CRASHLAB_WORKERS", 2)))
 MODEL_NAMES = ["fhs", "gaussian", "gaussian_copula", "t_copula", "cvae"]
