@@ -68,9 +68,57 @@ def test_constraint_report_no_forcing(cv, ds):
     spec = ScenarioSpec(horizon=10, n=300, regime="extreme", shocks={"NIFTY": -.15}, seed=1)
     g = generate(cv, spec, ds.returns.std().values)
     r = g["meta"]["constraint_report"][0]
-    assert g["meta"]["conditioning"] == "native" and 0 <= r["share_within_tolerance"] <= 1
-    assert g["sim"].shape == (300, 10, 6)                       # the report measures; nothing is rescaled
+    assert g["meta"]["conditioning"] == "native_kernel_resampling"
+    assert g["meta"]["target_semantics"] == "probabilistic"
+    assert not g["meta"]["hard_constraints_enforced"]
+    assert 0 <= r["share_within_tolerance"] <= 1
+    assert len(r["share_within_tolerance_ci95"]) == 2
+    assert len(r["realised_median_ci95_simple"]) == 2
+    assert r["predictive_interval"] == "5th–95th percentile"
+    assert r["violation_count"] + round(r["share_within_tolerance"] * 300) == 300
+    assert g["sim"].shape == (300, 10, 6)
     assert ScenarioSpec(horizon=99).validate() and ScenarioSpec(shocks={"X": .1}).validate()
+
+
+def test_kernel_conditioning_improves_target_without_changing_paths(cv):
+    from crashlab.scenarios import kernel_resample
+
+    targets = {"NIFTY": float(np.log1p(-.12)), "USDINR": float(np.log1p(.03))}
+    pool = cv.simulate(6000, 10, 12, 2, targets)
+    selected, info = kernel_resample(pool, targets, 300, 104741)
+    direct_hits = []
+    selected_hits = []
+    proposal_cum, selected_cum = pool.sum(1), selected.sum(1)
+    for asset, target in targets.items():
+        j = ASSETS.index(asset)
+        tol = max(.01, .15 * abs(target))
+        direct_hits.append(np.mean(np.abs(proposal_cum[:, j] - target) <= tol))
+        selected_hits.append(np.mean(np.abs(selected_cum[:, j] - target) <= tol))
+    assert min(selected_hits) > min(direct_hits) + .1
+    assert info["proposal_pool_size"] == len(pool)
+    assert info["kernel_effective_sample_size"] > 0
+    assert np.isfinite(selected).all()
+    # Resampling must return original paths, not alter returns to hit targets.
+    pool_rows = {row.tobytes() for row in pool}
+    assert all(row.tobytes() in pool_rows for row in selected)
+    repeated, _ = kernel_resample(pool, targets, 300, 104741)
+    assert np.array_equal(selected, repeated)
+    assert np.abs(np.corrcoef(pool.reshape(-1, 6).T) -
+                  np.corrcoef(selected.reshape(-1, 6).T)).max() < .2
+    assert np.allclose(selected.std((0, 1)), pool.std((0, 1)), rtol=.2)
+
+
+def test_constraint_report_explains_unsupported_targets():
+    from crashlab.scenarios import constraint_report
+
+    proposal = np.zeros((100, 2, 6))
+    sim = proposal.copy()
+    report = constraint_report(sim, {"NIFTY": np.log1p(.5)}, proposal)[0]
+    assert report["proposal_target_position"] == "outside_proposal_1_99"
+    assert report["proposal_share_within_tolerance"] == 0
+    assert report["share_within_tolerance"] == 0
+    assert report["violation_rate"] == 1
+    assert any("weak support" in item for item in report["diagnostics"])
 
 def test_portfolio_valuation_exact():
     sim = np.zeros((2, 2, 6)); sim[0, :, 0] = np.log(0.9) / 2     # NIFTY -10% over 2 days
@@ -119,3 +167,19 @@ def test_parser_infers_plain_language_market_scenarios():
     assert np.isclose(parse_story("rupee appreciates 4%")["shocks"]["USDINR"], -.04 / 1.04)
     assert parse_story("USDINR falls 4%")["shocks"]["USDINR"] == -.04
     assert parse_story("blorptastic nonsense")["shocks"] == {}
+
+
+def test_parser_ignores_negated_market_moves_and_events():
+    negated = parse_story(
+        "NIFTY does not fall 10%, the rupee does not depreciate 5%, "
+        "no recession is expected, and a war is not expected."
+    )
+    assert negated["shocks"] == {}
+    assert negated["regime"] is None
+
+    mixed = parse_story("Stocks are not falling 10%, but gold rises 5%.")
+    assert mixed["shocks"] == {"GOLD": .05}
+
+    asserted = parse_story("NIFTY falls 12%, but not 20%; gold rises 5%.")
+    assert asserted["shocks"]["NIFTY"] == -.12
+    assert asserted["shocks"]["GOLD"] == .05

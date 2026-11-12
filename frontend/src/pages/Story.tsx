@@ -82,7 +82,7 @@ export default function Story() {
           {parsed.defaults_applied.horizon && <div className="mt-1 text-tx3">No horizon found — defaulting to 10 trading days (editable below).</div>}
           <div className="mt-1 text-tx3">Rule-based interpretation. Edit any value below before generating; new text is interpreted automatically when you generate.</div></div>}
       </GlassCard>
-      <GlassCard title="Scenario parameters" hint="Cumulative shocks over the horizon. Leave a shock off to leave that asset unconstrained. USD/INR + means rupee depreciation.">
+      <GlassCard title="Scenario parameters" hint="Cumulative shocks over the horizon are probabilistic targets, not hard constraints. Leave a shock off to leave that asset unconstrained. USD/INR + means rupee depreciation.">
         <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">{SHOCK_ASSETS.map((a) => { const v = d.shocks[a]; return (
           <div key={a}><div className="mb-1 flex items-center justify-between"><label className="text-[12.5px]">{a === "NIFTY" ? "NIFTY cumulative shock" : a === "USDINR" ? "USD/INR shock" : `${LABEL[a]} shock`}</label>
             <span className="flex items-center gap-2"><span className="num text-[12.5px] text-cyan">{v === undefined ? "free" : pct(v, 0)}</span>
@@ -93,7 +93,7 @@ export default function Story() {
           <div><label className="lbl">Volatility regime</label><select value={d.regime} onChange={(e) => setD({ ...d, regime: e.target.value })}><option value="">Unspecified (historical mix)</option><option value="normal">Normal</option><option value="elevated">Elevated</option><option value="extreme">Extreme</option></select></div>
           <div><label className="lbl">Scenarios</label><select value={d.n} onChange={(e) => setD({ ...d, n: +e.target.value })}>{[1000, 2000, 5000, 10000, 20000].map((h) => <option key={h}>{h}</option>)}</select></div>
           <div><label className="lbl">Model</label><select value={d.model} onChange={(e) => setD({ ...d, model: e.target.value })}>{models.map((m) => <option key={m} value={m}>{MODEL_LABEL[m] ?? m}</option>)}</select></div></div>
-        {d.model !== "cvae" && Object.keys(d.shocks).some((k) => d.shocks[k] !== undefined) && <p className="mt-3 text-[12px] text-tx3">Baseline models are unconditional: they are conditioned by selecting the closest simulated analogs from a 20× larger pool (no path is altered). Extreme targets may have no close analog — the constraint report will show it.</p>}
+        {Object.keys(d.shocks).some((k) => d.shocks[k] !== undefined) && <p className="mt-3 text-[12px] text-tx3">Targets condition a proposal distribution and guide kernel-weighted selection. Paths are not modified; outcomes are not guaranteed. If the requested move is outside model support, the report shows the proposal range and attainment diagnostics.</p>}
         <div className="mt-5 flex items-center gap-4"><button className="btn btn-primary" disabled={busy} onClick={run}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}GENERATE SCENARIOS</button>
           {busy && <div className="flex-1"><div className="h-1.5 overflow-hidden rounded bg-white/10"><div className="h-full bg-gradient-to-r from-blue to-cyan transition-all" style={{ width: `${Math.max(5, (job?.progress ?? 0) * 100)}%` }} /></div>
             <div className="mt-1 text-[11.5px] text-tx3">{job ? `${job.status} · ${(job.progress * 100).toFixed(0)}%` : "submitting"}</div></div>}</div>

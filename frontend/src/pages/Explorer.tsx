@@ -53,10 +53,18 @@ export default function Explorer() {
       <div className="grid gap-4 lg:grid-cols-3">
         <GlassCard title="Scenario constraint satisfaction" hint="Requested vs realised — measured, never forced" className="lg:col-span-2">
           {!m.constraint_report.length ? <p className="text-tx2 text-[13px]">Unconditional run — no constraints requested.</p> :
-            <div className="overflow-x-auto"><table className="num"><thead><tr className="lbl"><th>Asset</th><th>Requested</th><th>Realised median</th><th>5–95% range</th><th>Within tol.</th></tr></thead><tbody>
-              {m.constraint_report.map((r: any) => (<tr key={r.asset}><td className="font-sans">{LABEL[r.asset]}</td><td>{pct(r.target_simple)}</td><td>{pct(r.realised_median_simple)}</td><td className="text-tx2">{pct(r.p05_simple, 0)} … {pct(r.p95_simple, 0)}</td>
-                <td className={r.share_within_tolerance > 0.5 ? "text-up" : r.share_within_tolerance > 0.2 ? "text-warn" : "text-down"}>{pctU(r.share_within_tolerance, 0)}</td></tr>))}</tbody></table>
-              <p className="mt-2 text-[11.5px] text-tx3">Mode: <b>{m.conditioning}</b>{m.conditioning === "analog_selection" && ` (pool ${m.pool_size.toLocaleString()}, median selection distance ${m.median_selected_distance_sd.toFixed(2)} sd)`}. Tolerance: ±max(1pp, 15% of target) in log return.</p></div>}
+            <div className="overflow-x-auto"><table className="num"><thead><tr className="lbl"><th>Asset</th><th>Requested target</th><th>Realised median (sampling 95% CI)</th><th>Predictive interval (5–95%)</th><th>Within tolerance (Wilson 95% CI)</th><th>Violations</th></tr></thead><tbody>
+              {m.constraint_report.map((r: any) => (<tr key={r.asset}>
+                <td className="font-sans">{LABEL[r.asset]}</td>
+                <td>{pct(r.target_simple)}</td>
+                <td>{pct(r.realised_median_simple)}{r.realised_median_ci95_simple && <span className="block text-[10px] text-tx3">{pct(r.realised_median_ci95_simple[0], 0)} … {pct(r.realised_median_ci95_simple[1], 0)}</span>}</td>
+                <td className="text-tx2">{pct(r.p05_simple, 0)} … {pct(r.p95_simple, 0)}</td>
+                <td className={r.share_within_tolerance > 0.5 ? "text-up" : r.share_within_tolerance > 0.2 ? "text-warn" : "text-down"}>
+                  {pctU(r.share_within_tolerance, 0)}{r.share_within_tolerance_ci95 && <span className="block text-[10px] text-tx3">{pctU(r.share_within_tolerance_ci95[0], 0)} … {pctU(r.share_within_tolerance_ci95[1], 0)}</span>}</td>
+                <td>{r.violation_count ?? "—"}{r.violation_rate !== undefined && <span className="block text-[10px] text-tx3">{pctU(r.violation_rate, 0)}</span>}</td>
+              </tr>))}</tbody></table>
+              <p className="mt-2 text-[11.5px] text-tx3">Mode: <b>{m.conditioning}</b>{m.proposal_pool_size && ` · ${m.proposal_pool_size.toLocaleString()} proposals · kernel ESS ${Math.round(m.kernel_effective_sample_size).toLocaleString()}`}. Targets are probabilistic, not hard constraints; each selected path is unchanged. Tolerance: ±max(1pp, 15% of target) in log return.</p>
+              {m.constraint_report.map((r: any) => r.diagnostics?.map((message: string) => <p key={`${r.asset}-${message}`} className="mt-1 text-[11.5px] text-warn">{LABEL[r.asset]}: {message}</p>))}</div>}
         </GlassCard>
         <GlassCard title="Joint tail exceedance" hint="P(asset in own worst 5% | NIFTY in worst 5%)">
           <HBar data={ASSETS.filter((a) => a !== "NIFTY").map((a) => ({ name: a, v: S.joint_tail_given_nifty[a] }))} fmt={(v) => pctU(v, 0)} color={C.cyan} height={200} /></GlassCard></div>
