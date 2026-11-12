@@ -4,9 +4,10 @@ export const ASSETS = ["NIFTY", "BANK", "IT", "GOLD", "CRUDE", "USDINR"] as cons
 export const LABEL: Record<string, string> = { NIFTY: "NIFTY 50", BANK: "NIFTY Bank", IT: "NIFTY IT", GOLD: "Gold", CRUDE: "Crude Oil", USDINR: "USD/INR", PORTFOLIO: "Portfolio" };
 export const MODEL_LABEL: Record<string, string> = { cvae: "Conditional VAE", fhs: "Filtered Hist. Sim.", t_copula: "Student-t Copula", gaussian_copula: "Gaussian Copula", gaussian: "Gaussian" };
 const CONFIGURED_API_URL = (import.meta.env.VITE_API_URL ?? "").trim();
-const API_ORIGIN = (CONFIGURED_API_URL || "https://crashlab-backend.onrender.com")
+const API_ORIGIN = (CONFIGURED_API_URL || (import.meta.env.DEV ? "" : "https://crashlab-backend.onrender.com"))
   .replace(/\/+$/, "")
   .replace(/\/api$/i, "");
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export function apiUrl(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -14,7 +15,31 @@ export function apiUrl(path: string): string {
 }
 
 export async function api<T = any>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(apiUrl(path), { headers: { "Content-Type": "application/json" }, ...init });
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+  const abortFromCaller = () => controller.abort(init?.signal?.reason);
+  if (init?.signal?.aborted) abortFromCaller();
+  else init?.signal?.addEventListener("abort", abortFromCaller, { once: true });
+
+  let r: Response;
+  try {
+    const headers = new Headers(init?.headers);
+    if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    r = await fetch(apiUrl(path), { ...init, headers, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${path}`);
+    if (error instanceof TypeError) {
+      throw new Error(`Network error requesting ${path} at ${apiUrl(path)}. Check the API connection and CORS configuration.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    init?.signal?.removeEventListener("abort", abortFromCaller);
+  }
   if (!r.ok) {
     const body = await r.text();
     let detail: unknown = body || r.statusText || "Request failed";
@@ -45,7 +70,7 @@ export const useOverview = () => useQuery({ queryKey: ["overview"], queryFn: () 
 export const useModels = () => useQuery({ queryKey: ["models"], queryFn: () => api("/api/models") });
 export const useComparison = () => useQuery({ queryKey: ["cmp"], queryFn: () => api("/api/models/comparison") });
 export const useResearch = () => useQuery({ queryKey: ["research"], queryFn: () => api("/api/research/metrics") });
-export const useScenarios = () => useQuery({ queryKey: ["scenarios"], queryFn: () => api("/api/scenarios?limit=20"), refetchInterval: 8000 });
+export const useScenarios = () => useQuery({ queryKey: ["scenarios"], queryFn: () => api("/api/scenarios?limit=100"), refetchInterval: 8000 });
 export const useScenario = (id?: string) => useQuery({ queryKey: ["scenario", id], queryFn: () => api(`/api/scenarios/${id}`), enabled: !!id,
   refetchInterval: (q) => (q.state.data && ["queued", "running"].includes(q.state.data.status) ? 600 : false) });
 export const useBacktest = (m: string) => useQuery({ queryKey: ["bt", m], queryFn: () => api(`/api/backtesting/${m}`) });

@@ -18,24 +18,35 @@ def client(tmp_path_factory):
     return TestClient(api.app)
 
 def test_cors_preflight_and_frontend_gets(client):
-    origin = "https://crashlab-qrqs.onrender.com"
-    preflight = client.options("/api/health", headers={
-        "Origin": origin,
-        "Access-Control-Request-Method": "GET",
-        "Access-Control-Request-Headers": "content-type,authorization",
-    })
-    assert preflight.status_code == 200
-    assert preflight.headers["access-control-allow-origin"] == origin
-    assert "GET" in preflight.headers["access-control-allow-methods"]
-    assert "POST" in preflight.headers["access-control-allow-methods"]
-    assert "authorization" in preflight.headers["access-control-allow-headers"].lower()
-    assert "content-type" in preflight.headers["access-control-allow-headers"].lower()
-    assert preflight.headers.get("access-control-allow-credentials") != "true"
+    origins = (
+        "https://crashlab-qrqs.onrender.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    )
+    for origin in origins:
+        preflight = client.options("/api/health", headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "content-type,authorization",
+        })
+        assert preflight.status_code == 200
+        assert preflight.headers["access-control-allow-origin"] == origin
+        assert "GET" in preflight.headers["access-control-allow-methods"]
+        assert "POST" in preflight.headers["access-control-allow-methods"]
+        for method in ("PUT", "PATCH", "DELETE", "OPTIONS"):
+            assert method in preflight.headers["access-control-allow-methods"]
+        assert "authorization" in preflight.headers["access-control-allow-headers"].lower()
+        assert "content-type" in preflight.headers["access-control-allow-headers"].lower()
+        assert preflight.headers.get("access-control-allow-credentials") != "true"
 
-    for path in ("/api/health", "/api/data/overview", "/api/scenarios?limit=20"):
-        response = client.get(path, headers={"Origin": origin})
+    for path in ("/api/health", "/api/data/overview", "/api/models", "/api/scenarios?limit=20"):
+        response = client.get(path, headers={"Origin": origins[-1]})
         assert response.status_code == 200, (path, response.text)
-        assert response.headers["access-control-allow-origin"] == origin
+        assert response.headers["access-control-allow-origin"] == origins[-1]
+
+    limited = client.get("/api/health", headers={"Origin": origins[-1], "content-length": "200001"})
+    assert limited.status_code == 413
+    assert limited.headers["access-control-allow-origin"] == origins[-1]
 
 def test_full_workflow(client):
     import time

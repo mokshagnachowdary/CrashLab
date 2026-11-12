@@ -10,12 +10,27 @@ import { useStress } from "./Portfolio";
 
 export default function Explorer() {
   const [sp, setSp] = useSearchParams(); const { simId, setSimId, weights, v0 } = useApp();
+  const [scenarioSearch, setScenarioSearch] = useState("");
+  const [scenarioModel, setScenarioModel] = useState("all");
   const urlId = sp.get("sim");
   const requestedId = urlId ?? simId;
   const list = useScenarios();
   const completedScenarios = (list.data ?? []).filter((scenario: any) => scenario.status === "completed");
-  const selectedScenario = completedScenarios.find((scenario: any) => scenario.id === requestedId) ?? completedScenarios[0];
+  const filteredScenarios = completedScenarios.filter((scenario: any) =>
+    (scenarioModel === "all" || scenario.request.model === scenarioModel)
+    && `${scenario.name} ${scenario.request.model} ${MODEL_LABEL[scenario.request.model] ?? ""}`.toLowerCase().includes(scenarioSearch.trim().toLowerCase()),
+  );
+  const selectedScenario = filteredScenarios.find((scenario: any) => scenario.id === requestedId) ?? filteredScenarios[0];
   const id = selectedScenario?.id;
+  const intro = <PageIntro
+    title="Scenario Explorer"
+    description="Explore how different market conditions could affect your assets over time using the generated simulation paths and risk diagnostics."
+  />;
+  const searchInput = <input className="!w-auto min-w-[180px]" value={scenarioSearch} onChange={(e) => setScenarioSearch(e.target.value)} placeholder="Search scenarios or models" aria-label="Search scenarios" />;
+  const modelFilter = <select className="!w-auto min-w-[180px]" value={scenarioModel} onChange={(e) => setScenarioModel(e.target.value)} aria-label="Filter by model">
+    <option value="all">All models</option>{Object.entries(MODEL_LABEL).filter(([id]) => id !== "PORTFOLIO").map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+  </select>;
+  const scenarioFilters = <div className="flex flex-wrap items-center gap-3">{searchInput}{modelFilter}</div>;
   const q = useScenario(id);
   const [tab, setTab] = useState<string>("NIFTY");
   const stress = useStress(tab === "PORTFOLIO" ? id ?? undefined : undefined, weights, v0);
@@ -28,7 +43,12 @@ export default function Explorer() {
   }, [id, list.isSuccess, setSimId, setSp, simId, urlId]);
   if (list.isLoading) return <Skeleton h={400} />;
   if (list.isError) return <ErrorState error={list.error} />;
-  if (!id) return <Empty text="No completed scenarios yet. Generate one in Story Mode first." action={<Link className="btn btn-primary" to="/story">Open Story Mode</Link>} />;
+  if (!id) return <div className="space-y-4">{intro}
+    {scenarioFilters}
+    {completedScenarios.length
+      ? <Empty text="No scenarios match these filters." action={<button className="btn btn-ghost" onClick={() => { setScenarioSearch(""); setScenarioModel("all"); }}>Clear filters</button>} />
+      : <Empty text="No completed scenarios yet. Generate one in Story Mode first." action={<Link className="btn btn-primary" to="/story">Open Story Mode</Link>} />}
+  </div>;
   if (q.isError) return <ErrorState error={q.error} />;
   const j = q.data; if (!j) return <Skeleton h={400} />;
   if (j.status === "failed") return <ErrorState error={j.error} />;
@@ -37,13 +57,11 @@ export default function Explorer() {
   const fin = tab === "PORTFOLIO" ? null : S.final_hist[tab];
   return (
     <div className="space-y-4">
-      <PageIntro
-        title="Scenario Explorer"
-        description="Explore how different market conditions could affect your assets over time using the generated simulation paths and risk diagnostics."
-      />
+      {intro}
       <div className="flex flex-wrap items-center gap-3">
+        {scenarioFilters}
         <select className="!w-auto min-w-[220px]" value={id} onChange={(e) => { setSimId(e.target.value); setSp({ sim: e.target.value }); }}>
-          {(list.data ?? []).filter((x: any) => x.status === "completed").map((x: any) => <option key={x.id} value={x.id}>{x.name} · {MODEL_LABEL[x.request.model]}</option>)}</select>
+          {filteredScenarios.map((x: any) => <option key={x.id} value={x.id}>{x.name} · {MODEL_LABEL[x.request.model]}</option>)}</select>
         <span className="text-[12px] text-tx3">{MODEL_LABEL[m.model]} v{m.model_version} · seed {m.seed} · {m.n.toLocaleString()} paths · {m.horizon}d · regime {m.regime ?? "mixed"} · {m.seconds.toFixed(2)}s</span>
         <span className="ml-auto flex gap-2"><a className="btn btn-ghost !py-1.5" href={apiUrl(`/api/scenarios/${id}/export?format=csv`)}><Download size={14} />CSV</a><a className="btn btn-ghost !py-1.5" href={apiUrl(`/api/scenarios/${id}/export?format=json`)}><Download size={14} />JSON</a></span></div>
       <GlassCard title={`${LABEL[tab]} — cumulative return fan`} right={<Tabs items={[...ASSETS, "PORTFOLIO"] as const} value={tab as any} onChange={setTab} labels={LABEL} />}

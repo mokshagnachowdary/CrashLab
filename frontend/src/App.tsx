@@ -16,7 +16,7 @@ const NAV = [
   { to: "/story", label: "Story Mode", icon: PenLine, title: "Story Mode", desc: "Describe a hypothetical crisis and generate scenarios" },
   { to: "/explorer", label: "Scenario Explorer", icon: Telescope, title: "Scenario Explorer", desc: "Fan charts and distributions from generated simulations" },
   { to: "/portfolio", label: "Portfolio Risk", icon: ShieldAlert, title: "Portfolio Risk", desc: "Stress-test a portfolio on the generated scenarios" },
-  { to: "/models", label: "Model Lab", icon: FlaskConical, title: "Model Lab", desc: "Out-of-sample benchmark of all four generators" },
+  { to: "/models", label: "Model Lab", icon: FlaskConical, title: "Model Lab", desc: "Out-of-sample benchmark of all five generators" },
   { to: "/research", label: "Data & Research", icon: Database, title: "Data & Research", desc: "Data coverage, quality, methodology and limitations" },
   { to: "/settings", label: "Settings", icon: Cog, title: "Settings", desc: "Service status and preferences" },
 ];

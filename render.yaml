@@ -27,6 +27,12 @@ services:
       - key: CRASHLAB_WORKERS
         value: "1"
 
+      - key: CRASHLAB_MAX_CONCURRENT_SIMULATIONS
+        value: "1"
+
+      - key: CRASHLAB_SIM_BATCH_SIZE
+        value: "256"
+
 databases:
   - name: crashlab-db
     databaseName: crashlab

@@ -64,6 +64,22 @@ def test_cvae_inference_reproducible_and_conditioned(cv, tmp_path):
     assert np.allclose(m2.simulate(50, 10, 5, 2, {"NIFTY": -.1}), cv.simulate(50, 10, 5, 2, {"NIFTY": -.1}), atol=1e-5)
     assert len(cv.history) >= 1 and "val_loss" in cv.history[0]
 
+
+def test_cvae_batched_inference_is_reproducible_and_statistically_consistent(cv):
+    constraints = {"NIFTY": -.1, "USDINR": .03}
+    whole_batch = cv.simulate(512, 10, 91, 2, constraints, batch_size=512)
+    batched = cv.simulate(512, 10, 91, 2, constraints, batch_size=32)
+    repeated = cv.simulate(512, 10, 91, 2, constraints, batch_size=32)
+
+    assert np.array_equal(batched, repeated)
+    assert np.allclose(batched.mean((0, 1)), whole_batch.mean((0, 1)), atol=1e-3)
+    assert np.allclose(batched.std((0, 1)), whole_batch.std((0, 1)), rtol=.05)
+    assert np.abs(
+        np.corrcoef(batched.reshape(-1, 6).T)
+        - np.corrcoef(whole_batch.reshape(-1, 6).T)
+    ).max() < .05
+
+
 def test_constraint_report_no_forcing(cv, ds):
     spec = ScenarioSpec(horizon=10, n=300, regime="extreme", shocks={"NIFTY": -.15}, seed=1)
     g = generate(cv, spec, ds.returns.std().values)

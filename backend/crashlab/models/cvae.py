@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import math
+import os
 import time
 from dataclasses import asdict, dataclass
 
@@ -22,6 +23,9 @@ from torch.nn.utils.rnn import pack_padded_sequence
 from .base import ScenarioModel
 
 N_REG = 3
+DEFAULT_INFERENCE_BATCH_SIZE = int(os.getenv("CRASHLAB_SIM_BATCH_SIZE", "256"))
+if DEFAULT_INFERENCE_BATCH_SIZE < 1:
+    raise ValueError("CRASHLAB_SIM_BATCH_SIZE must be positive")
 
 
 @dataclass
@@ -188,11 +192,16 @@ class CVAEModel(ScenarioModel):
         return self
 
     # ---- inference (independent of the training loop) ------------------------------------------------------
-    @torch.no_grad()
-    def simulate(self, n, horizon, seed, regime=None, constraints=None):
+    @torch.inference_mode()
+    def simulate(self, n, horizon, seed, regime=None, constraints=None, batch_size=None):
         """constraints: {asset_name: cumulative LOG return over `horizon`}. Unlisted assets are unconstrained."""
         cfg = self.cfg
         assert 1 <= horizon <= cfg.max_h, f"horizon must be in [1,{cfg.max_h}]"
+        inference_batch_size = (
+            DEFAULT_INFERENCE_BATCH_SIZE if batch_size is None else int(batch_size)
+        )
+        if inference_batch_size < 1:
+            raise ValueError("inference batch_size must be positive")
         g = torch.Generator(device="cpu").manual_seed(seed)
         self.net.eval()
         N = len(self.assets)
@@ -208,14 +217,20 @@ class CVAEModel(ScenarioModel):
             reg = torch.full((n,), regime, device=self.device)
         c = self._cond(cum_z, mask, h, reg)
         z = torch.randn(n, cfg.latent, generator=g).to(self.device)
-        xh = self.net.decode(z, c)
-        eps = torch.randn(xh.shape, generator=g).to(self.device)
+        eps = torch.randn((n, cfg.max_h, N), generator=g)
+        chi = None
         if cfg.tail_aware:
-            chi = torch.distributions.Chi2(torch.tensor(cfg.t_df)).sample((n, 1, 1)).to(self.device)
-            eps = eps / torch.sqrt(chi / cfg.t_df)
-        x = xh + eps @ self.net.chol().T
-        r = (x * self.sd + self.mu)[:, :horizon]
-        out = r.cpu().numpy().astype(np.float64)
+            chi = torch.distributions.Chi2(torch.tensor(cfg.t_df)).sample((n, 1, 1))
+        out = np.empty((n, horizon, N), dtype=np.float64)
+        chol = self.net.chol()
+        for start in range(0, n, inference_batch_size):
+            end = min(start + inference_batch_size, n)
+            xh = self.net.decode(z[start:end], c[start:end])
+            eps_batch = eps[start:end].to(self.device)
+            if chi is not None:
+                eps_batch = eps_batch / torch.sqrt(chi[start:end].to(self.device) / cfg.t_df)
+            x = xh + eps_batch @ chol.T
+            out[start:end] = ((x * self.sd + self.mu)[:, :horizon]).cpu().numpy()
         assert np.isfinite(out).all(), "non-finite values generated"
         return out
 

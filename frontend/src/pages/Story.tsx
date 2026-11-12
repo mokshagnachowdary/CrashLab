@@ -45,7 +45,7 @@ export default function Story() {
       validationErrors = p.validation_errors ?? [];
     }
     const verrs = [...validationErrors];
-    if (draft.n < 1 || draft.n > 50000) verrs.push("Scenario count must be 1–50,000");
+    if (draft.n < 1 || draft.n > 5000) verrs.push("Scenario count must be 1–5,000");
     if (verrs.length) { setBusy(false); toast(verrs.join("; "), "err"); setErr(new Error(verrs.join("; "))); return; }
     setBusy(true); setJob(null);
     try {
@@ -91,7 +91,7 @@ export default function Story() {
         <div className="mt-5 grid gap-4 sm:grid-cols-4">
           <div><label className="lbl">Horizon (days)</label><select value={d.horizon} onChange={(e) => setD({ ...d, horizon: +e.target.value })}>{[5, 10, 15, 20].map((h) => <option key={h}>{h}</option>)}{![5, 10, 15, 20].includes(d.horizon) && <option>{d.horizon}</option>}</select></div>
           <div><label className="lbl">Volatility regime</label><select value={d.regime} onChange={(e) => setD({ ...d, regime: e.target.value })}><option value="">Unspecified (historical mix)</option><option value="normal">Normal</option><option value="elevated">Elevated</option><option value="extreme">Extreme</option></select></div>
-          <div><label className="lbl">Scenarios</label><select value={d.n} onChange={(e) => setD({ ...d, n: +e.target.value })}>{[1000, 2000, 5000, 10000, 20000].map((h) => <option key={h}>{h}</option>)}</select></div>
+          <div><label className="lbl">Scenarios (max 5,000)</label><select value={d.n} onChange={(e) => setD({ ...d, n: +e.target.value })}>{[1000, 2000, 5000].map((h) => <option key={h}>{h}</option>)}</select></div>
           <div><label className="lbl">Model</label><select value={d.model} onChange={(e) => setD({ ...d, model: e.target.value })}>{models.map((m) => <option key={m} value={m}>{MODEL_LABEL[m] ?? m}</option>)}</select></div></div>
         {Object.keys(d.shocks).some((k) => d.shocks[k] !== undefined) && <p className="mt-3 text-[12px] text-tx3">Targets condition a proposal distribution and guide kernel-weighted selection. Paths are not modified; outcomes are not guaranteed. If the requested move is outside model support, the report shows the proposal range and attainment diagnostics.</p>}
         <div className="mt-5 flex items-center gap-4"><button className="btn btn-primary" disabled={busy} onClick={run}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}GENERATE SCENARIOS</button>

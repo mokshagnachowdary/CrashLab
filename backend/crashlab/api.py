@@ -5,6 +5,7 @@ import csv
 import io
 import logging
 import os
+import re
 import time
 import uuid
 from collections import defaultdict, deque
@@ -28,6 +29,7 @@ app = FastAPI(title="CRASHLAB API", version="1.0.0",
               description="Generative financial stress testing. Research/education tool — not investment advice.")
 DEFAULT_CORS_ORIGINS = {
     "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "https://crashlab-qrqs.onrender.com",
 }
 configured_cors_origins = {
@@ -35,25 +37,55 @@ configured_cors_origins = {
     for origin in os.getenv("CORS_ORIGINS", "").split(",")
     if origin.strip()
 }
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=sorted(DEFAULT_CORS_ORIGINS | configured_cors_origins),
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Accept", "Authorization", "Content-Type", "Origin", "X-Requested-With"],
-    allow_credentials=False,
-)
 STATE = service.State()
-POOL = ThreadPoolExecutor(max_workers=int(os.getenv("CRASHLAB_WORKERS", 2)))
+MAX_CONCURRENT_SIMULATIONS = int(os.getenv("CRASHLAB_MAX_CONCURRENT_SIMULATIONS", "1"))
+CONFIGURED_WORKERS = int(os.getenv("CRASHLAB_WORKERS", "1"))
+if MAX_CONCURRENT_SIMULATIONS < 1 or CONFIGURED_WORKERS < 1:
+    raise ValueError("simulation worker and concurrency limits must be positive")
+POOL = ThreadPoolExecutor(
+    max_workers=min(CONFIGURED_WORKERS, MAX_CONCURRENT_SIMULATIONS)
+)
 MODEL_NAMES = ["fhs", "gaussian", "gaussian_copula", "t_copula", "cvae"]
 MAX_BODY = 200_000
 _hits: dict[str, deque] = defaultdict(deque)
 RATE = int(os.getenv("CRASHLAB_RATE_PER_MIN", 120))
 
 
+def _process_memory_mb() -> tuple[float | None, float | None]:
+    try:
+        with open("/proc/self/status", encoding="ascii") as status_file:
+            status = status_file.read()
+        values = {
+            name: float(value) / 1024
+            for name, value in re.findall(r"^(VmRSS|VmHWM):\s+(\d+)\s+kB$", status, re.MULTILINE)
+        }
+        return values.get("VmRSS"), values.get("VmHWM")
+    except OSError:
+        return None, None
+
+
+def _log_simulation_memory(job_id: str, phase: str, req: dict, started: float) -> None:
+    rss_mb, peak_rss_mb = _process_memory_mb()
+    log.info(
+        "simulation_memory job=%s phase=%s model=%s n=%d horizon=%d "
+        "rss_mb=%s process_peak_rss_mb=%s elapsed_s=%.3f",
+        job_id, phase, req["model"], req["n"], req["horizon"],
+        f"{rss_mb:.1f}" if rss_mb is not None else "unavailable",
+        f"{peak_rss_mb:.1f}" if peak_rss_mb is not None else "unavailable",
+        time.perf_counter() - started,
+    )
+
+
 @app.on_event("startup")
 def startup():
     db.init_db(); STATE.load()
     if not STATE.ready: log.error("artifacts not loaded: %s", STATE.error)
+    log.info(
+        "simulation_workers=%d max_concurrent_simulations=%d inference_batch_size=%s",
+        min(CONFIGURED_WORKERS, MAX_CONCURRENT_SIMULATIONS),
+        MAX_CONCURRENT_SIMULATIONS,
+        os.getenv("CRASHLAB_SIM_BATCH_SIZE", "256"),
+    )
 
 
 @app.middleware("http")
@@ -66,6 +98,16 @@ async def guard(request: Request, call_next):
     if len(q) >= RATE: return JSONResponse({"detail": "rate limit exceeded"}, 429)
     q.append(t)
     return await call_next(request)
+
+
+# Register after the HTTP guard so CORS wraps rate-limit and other middleware responses.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=sorted(DEFAULT_CORS_ORIGINS | configured_cors_origins),
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Accept", "Authorization", "Content-Type", "Origin", "X-Requested-With"],
+    allow_credentials=False,
+)
 
 
 def need_ready():
@@ -105,6 +147,8 @@ def _job_dict(j: db.SimulationJob):
 
 
 def _run_job(job_id: str, req: dict):
+    started = time.perf_counter()
+    _log_simulation_memory(job_id, "started", req, started)
     with db.SessionLocal() as s:
         job = s.get(db.SimulationJob, job_id); job.status, job.progress = "running", 0.1; s.commit()
         try:
@@ -112,16 +156,20 @@ def _run_job(job_id: str, req: dict):
             model = STATE.models[req["model"]]
             kw = {}
             g = generate(model, spec, STATE.ref_sd)
+            _log_simulation_memory(job_id, "generated", req, started)
             job.progress = 0.7; s.commit()
             sim = g["sim"]
             path = DATA_DIR / "simulations" / f"{job_id}.npz"
             np.savez_compressed(path, sim=sim.astype(np.float32))
+            _log_simulation_memory(job_id, "saved", req, started)
             job.array_path, job.meta = str(path), g["meta"]
             job.summary = service.sim_summary(sim)
+            _log_simulation_memory(job_id, "summarized", req, started)
             job.status, job.progress, job.finished_at = "completed", 1.0, db.now()
         except Exception as e:
             log.exception("job %s failed", job_id)
             job.status, job.error, job.finished_at = "failed", f"{type(e).__name__}: {e}"[:1900], db.now()
+            _log_simulation_memory(job_id, "failed", req, started)
         s.commit()
 
 
