@@ -7,10 +7,11 @@ export const useApp = () => useContext(Ctx);
 
 const read = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const write = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage may be blocked */ } };
+const remove = (k: string) => { try { localStorage.removeItem(k); } catch { /* storage may be blocked */ } };
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [simId, _s] = useState<string | undefined>(() => read("cl.sim", undefined));
   const [weights, _w] = useState<Record<string, number>>(() => read("cl.w", DEFAULT_W));
   const [v0, _v] = useState<number>(() => read("cl.v0", 1_000_000));
-  return <Ctx.Provider value={{ simId, setSimId: (s) => { _s(s); write("cl.sim", s); }, weights, setWeights: (w) => { _w(w); write("cl.w", w); }, v0, setV0: (v) => { _v(v); write("cl.v0", v); } }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ simId, setSimId: (s) => { _s(s); if (s) write("cl.sim", s); else remove("cl.sim"); }, weights, setWeights: (w) => { _w(w); write("cl.w", w); }, v0, setV0: (v) => { _v(v); write("cl.v0", v); } }}>{children}</Ctx.Provider>;
 }

@@ -10,13 +10,25 @@ import { useStress } from "./Portfolio";
 
 export default function Explorer() {
   const [sp, setSp] = useSearchParams(); const { simId, setSimId, weights, v0 } = useApp();
-  const id = sp.get("sim") ?? simId; useEffect(() => { if (id && id !== simId) setSimId(id); }, [id]);
-  const q = useScenario(id ?? undefined); const list = useScenarios();
+  const urlId = sp.get("sim");
+  const requestedId = urlId ?? simId;
+  const list = useScenarios();
+  const completedScenarios = (list.data ?? []).filter((scenario: any) => scenario.status === "completed");
+  const selectedScenario = completedScenarios.find((scenario: any) => scenario.id === requestedId) ?? completedScenarios[0];
+  const id = selectedScenario?.id;
+  const q = useScenario(id);
   const [tab, setTab] = useState<string>("NIFTY");
   const stress = useStress(tab === "PORTFOLIO" ? id ?? undefined : undefined, weights, v0);
   const hz = q.data?.meta?.horizon;
   const hist = useQuery({ queryKey: ["href", tab, hz], enabled: !!hz && tab !== "PORTFOLIO", queryFn: () => api(`/api/data/history-ref?asset=${tab}&horizon=${hz}`) });
-  if (!id) return <Empty text="No scenario selected. Generate one in Story Mode first." action={<Link className="btn btn-primary" to="/story">Open Story Mode</Link>} />;
+  useEffect(() => {
+    if (!list.isSuccess) return;
+    if (simId !== id) setSimId(id);
+    if (urlId !== id) setSp(id ? { sim: id } : {}, { replace: true });
+  }, [id, list.isSuccess, setSimId, setSp, simId, urlId]);
+  if (list.isLoading) return <Skeleton h={400} />;
+  if (list.isError) return <ErrorState error={list.error} />;
+  if (!id) return <Empty text="No completed scenarios yet. Generate one in Story Mode first." action={<Link className="btn btn-primary" to="/story">Open Story Mode</Link>} />;
   if (q.isError) return <ErrorState error={q.error} />;
   const j = q.data; if (!j) return <Skeleton h={400} />;
   if (j.status === "failed") return <ErrorState error={j.error} />;
