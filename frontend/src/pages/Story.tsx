@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, Sparkles, Wand2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { ASSETS, LABEL, MODEL_LABEL, api, post, pct } from "../api";
 import { ErrorState, GlassCard, PageIntro, SyntheticBanner, useToast } from "../components/ui";
 import { useApp } from "../store";
@@ -15,14 +16,23 @@ const PRESETS: { name: string; text: string }[] = [
 ];
 const SHOCK_ASSETS = ["NIFTY", "USDINR", "BANK", "IT", "GOLD", "CRUDE"] as const;
 type Draft = { shocks: Record<string, number | undefined>; horizon: number; regime: string; n: number; model: string };
+const MODEL_DESCRIPTION: Record<string, string> = {
+  cvae: "Conditional VAE: a learned sequence generator with native asset-target conditioning.",
+  fhs: "Filtered Historical Simulation: resamples synchronized historical residuals with volatility dynamics.",
+  gaussian: "Gaussian: multivariate normal returns using estimated means and covariance.",
+  gaussian_copula: "Gaussian Copula: t-distributed asset returns with Gaussian cross-asset dependence.",
+  t_copula: "Student-t Copula: t-distributed asset returns with tail-dependent cross-asset dependence.",
+};
 
 export default function Story() {
   const nav = useNavigate(), toast = useToast(), { setSimId } = useApp(), ov = useOverview();
   const [text, setText] = useState(""); const [parsed, setParsed] = useState<any>(null); const [lastParsed, setLastParsed] = useState("");
+  const [selectedPreset, setSelectedPreset] = useState("");
   const [d, setD] = useState<Draft>({ shocks: {}, horizon: 10, regime: "", n: 1000, model: "cvae" });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<unknown>(null);
-  const [job, setJob] = useState<any>(null); const [models, setModels] = useState<string[]>([]);
-  useEffect(() => { api("/api/models").then((m) => setModels(m.models.map((x: any) => x.id))).catch(() => setModels(["cvae", "fhs", "t_copula", "gaussian_copula", "gaussian"])); }, []);
+  const [job, setJob] = useState<any>(null);
+  const modelsQuery = useQuery({ queryKey: ["models"], queryFn: () => api("/api/models") });
+  const models: string[] = modelsQuery.data?.models?.map((model: any) => model.id) ?? [];
 
   const parse = async (t = text) => {
     setErr(null);
@@ -50,8 +60,13 @@ export default function Story() {
     setBusy(true); setJob(null);
     try {
       const shocks = Object.fromEntries(Object.entries(draft.shocks).filter(([, v]) => v !== undefined && !Number.isNaN(v)));
-      const name = text.trim().slice(0, 60) || (Object.keys(shocks).length ? "Custom stress scenario" : "Unconditional scenario");
-      const r = await post("/api/scenarios/generate", { name, model: draft.model, horizon: draft.horizon, n: draft.n, regime: draft.regime || null, shocks, seed: 42 });
+      const name = selectedPreset || text.trim().slice(0, 60) || (Object.keys(shocks).length ? "Custom stress scenario" : "Unconditional scenario");
+      const r = await post("/api/scenarios/generate", {
+        name, model: draft.model, horizon: draft.horizon, n: draft.n,
+        regime: draft.regime || null, shocks, seed: 42,
+        source: selectedPreset ? "preset" : "custom",
+        preset_name: selectedPreset || null,
+      });
       for (let i = 0; i < 900; i++) {
         const j = await api(`/api/scenarios/${r.id}`, undefined); setJob(j);
         if (j.status === "completed") { setSimId(j.id); toast("Scenarios generated"); nav(`/explorer?sim=${j.id}`); return; }
@@ -71,18 +86,33 @@ export default function Story() {
       <SyntheticBanner synthetic={ov.data?.synthetic} />
       <div className="py-4 text-center"><h2 className="text-3xl font-semibold">Dream a <span className="text-cyan">market crash.</span></h2>
         <p className="mx-auto mt-2 max-w-xl text-tx2">Describe a hypothetical financial crisis. Let the simulation engine explore how markets and portfolios could respond.</p></div>
-      <GlassCard>
-        <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} className="!text-[15px]" aria-label="Scenario description"
+      <GlassCard title="1. Choose where your scenario starts">
+        <p className="mb-3 text-[12px] text-tx2">Built-in templates are examples you can edit. Choose “Custom input” to write a scenario from scratch. Nothing is generated until you press Generate.</p>
+        <div className="mb-3 max-w-sm"><label className="lbl" htmlFor="scenario-preset">Starting point</label>
+          <select id="scenario-preset" value={selectedPreset} onChange={(e) => {
+            const preset = PRESETS.find((item) => item.name === e.target.value);
+            setSelectedPreset(preset?.name ?? "");
+            if (preset) { setText(preset.text); parse(preset.text); }
+          }}>
+            <option value="">Custom input — write your own scenario</option>
+            {PRESETS.map((preset) => <option key={preset.name} value={preset.name}>{preset.name}</option>)}
+          </select>
+        </div>
+        <p className="mb-2 rounded-lg border border-white/[.07] bg-white/[.025] px-3 py-2 text-[12px] text-tx2" role="status">
+          {selectedPreset
+            ? <>Starting from built-in template: <b className="text-cyan">{selectedPreset}</b>. You can edit it; this run will remain labeled as template-based.</>
+            : <>Starting from <b className="text-cyan">your custom input</b>. This run will be labeled as a custom Story Mode scenario.</>}
+        </p>
+        <textarea rows={4} value={text} onChange={(e) => { setText(e.target.value); setSelectedPreset(""); }} className="!text-[15px]" aria-label="Scenario description"
           placeholder="NIFTY falls 15% over 10 trading days, the rupee depreciates by 4%, banking stocks experience elevated volatility, and crude oil increases 12%..." />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {PRESETS.map((p) => <button key={p.name} className="btn btn-ghost !py-1.5 !text-[12px]" onClick={() => { setText(p.text); parse(p.text); }}>{p.name}</button>)}
           <button className="btn btn-ghost ml-auto" onClick={() => parse()} disabled={text.trim().length < 3}><Wand2 size={15} />Parse text</button></div>
         {parsed && <div className="mt-3 rounded-xl border border-blue/25 bg-blue/5 p-3 text-[12.5px]"><b className="text-cyan">Interpreted as:</b> {parsed.found.length ? parsed.found.join(" · ") : "nothing recognised"}
           {parsed.warnings.map((w: string) => <div key={w} className="mt-1 text-warn">{w}</div>)}{parsed.validation_errors.map((w: string) => <div key={w} className="mt-1 text-down">{w}</div>)}
           {parsed.defaults_applied.horizon && <div className="mt-1 text-tx3">No horizon found — defaulting to 10 trading days (editable below).</div>}
           <div className="mt-1 text-tx3">Rule-based interpretation. Edit any value below before generating; new text is interpreted automatically when you generate.</div></div>}
       </GlassCard>
-      <GlassCard title="Scenario parameters" hint="Cumulative shocks over the horizon are probabilistic targets, not hard constraints. Leave a shock off to leave that asset unconstrained. USD/INR + means rupee depreciation.">
+      <GlassCard title="2. Review scenario parameters" hint="Cumulative shocks over the horizon are probabilistic targets, not hard constraints. Leave a shock off to leave that asset unconstrained. USD/INR + means rupee depreciation.">
         <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">{SHOCK_ASSETS.map((a) => { const v = d.shocks[a]; return (
           <div key={a}><div className="mb-1 flex items-center justify-between"><label className="text-[12.5px]">{a === "NIFTY" ? "NIFTY cumulative shock" : a === "USDINR" ? "USD/INR shock" : `${LABEL[a]} shock`}</label>
             <span className="flex items-center gap-2"><span className="num text-[12.5px] text-cyan">{v === undefined ? "free" : pct(v, 0)}</span>
@@ -92,9 +122,14 @@ export default function Story() {
           <div><label className="lbl">Horizon (days)</label><select value={d.horizon} onChange={(e) => setD({ ...d, horizon: +e.target.value })}>{[5, 10, 15, 20].map((h) => <option key={h}>{h}</option>)}{![5, 10, 15, 20].includes(d.horizon) && <option>{d.horizon}</option>}</select></div>
           <div><label className="lbl">Volatility regime</label><select value={d.regime} onChange={(e) => setD({ ...d, regime: e.target.value })}><option value="">Unspecified (historical mix)</option><option value="normal">Normal</option><option value="elevated">Elevated</option><option value="extreme">Extreme</option></select></div>
           <div><label className="lbl">Scenarios (max 5,000)</label><select value={d.n} onChange={(e) => setD({ ...d, n: +e.target.value })}>{[1000, 2000, 5000].map((h) => <option key={h}>{h}</option>)}</select></div>
-          <div><label className="lbl">Model</label><select value={d.model} onChange={(e) => setD({ ...d, model: e.target.value })}>{models.map((m) => <option key={m} value={m}>{MODEL_LABEL[m] ?? m}</option>)}</select></div></div>
+          <div><label className="lbl">Simulation model</label><select value={d.model} onChange={(e) => setD({ ...d, model: e.target.value })} disabled={modelsQuery.isLoading || modelsQuery.isError || models.length === 0}>
+            {models.map((m) => <option key={m} value={m}>{MODEL_LABEL[m] ?? m}</option>)}
+          </select></div></div>
+        {modelsQuery.isError
+          ? <p className="mt-3 text-[12px] text-down">Could not load available models: {(modelsQuery.error as Error).message}</p>
+          : <p className="mt-3 text-[12px] text-tx3">{MODEL_DESCRIPTION[d.model] ?? ""} Every available model produces a saved run that appears in Scenario Explorer; the model changes the simulation method, not where the output is displayed.</p>}
         {Object.keys(d.shocks).some((k) => d.shocks[k] !== undefined) && <p className="mt-3 text-[12px] text-tx3">Targets condition a proposal distribution and guide kernel-weighted selection. Paths are not modified; outcomes are not guaranteed. If the requested move is outside model support, the report shows the proposal range and attainment diagnostics.</p>}
-        <div className="mt-5 flex items-center gap-4"><button className="btn btn-primary" disabled={busy} onClick={run}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}GENERATE SCENARIOS</button>
+        <div className="mt-5 flex items-center gap-4"><button className="btn btn-primary" disabled={busy || modelsQuery.isLoading || modelsQuery.isError || models.length === 0} onClick={run}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}GENERATE SCENARIOS</button>
           {busy && <div className="flex-1"><div className="h-1.5 overflow-hidden rounded bg-white/10"><div className="h-full bg-gradient-to-r from-blue to-cyan transition-all" style={{ width: `${Math.max(5, (job?.progress ?? 0) * 100)}%` }} /></div>
             <div className="mt-1 text-[11.5px] text-tx3">{job ? `${job.status} · ${(job.progress * 100).toFixed(0)}%` : "submitting"}</div></div>}</div>
       </GlassCard>

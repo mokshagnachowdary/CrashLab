@@ -53,9 +53,22 @@ def test_full_workflow(client):
     h = client.get("/api/health").json(); assert h["api"] == "ok" and h["models_loaded"]
     p = client.post("/api/scenarios/parse", json={"text": "NIFTY falls 15% over 10 trading days, rupee depreciates 4%"}).json()
     assert p["shocks"]["NIFTY"] == -.15 and not p["validation_errors"]
+    missing_preset_name = client.post(
+        "/api/scenarios/generate",
+        json={"source": "preset", "n": 1},
+    )
+    assert missing_preset_name.status_code == 422
+    unexpected_preset_name = client.post(
+        "/api/scenarios/generate",
+        json={"source": "custom", "preset_name": "Banking Crisis", "n": 1},
+    )
+    assert unexpected_preset_name.status_code == 422
     ids = {}
     for m in ("cvae", "t_copula", "fhs"):
-        r = client.post("/api/scenarios/generate", json={"model": m, "horizon": p["horizon"], "n": 1000, "shocks": p["shocks"], "regime": "extreme"})
+        request = {"model": m, "horizon": p["horizon"], "n": 1000, "shocks": p["shocks"], "regime": "extreme"}
+        if m == "cvae":
+            request.update({"source": "preset", "preset_name": "Banking Crisis"})
+        r = client.post("/api/scenarios/generate", json=request)
         assert r.status_code == 202; ids[m] = r.json()["id"]
     for m, i in ids.items():
         for _ in range(120):
@@ -64,6 +77,12 @@ def test_full_workflow(client):
             time.sleep(.5)
         assert s["status"] == "completed", s.get("error")
         assert s["meta"]["constraint_report"] and len(s["summary"]["bands"]["NIFTY"]["50"]) == 11
+        if m == "cvae":
+            assert s["request"]["source"] == "preset"
+            assert s["request"]["preset_name"] == "Banking Crisis"
+        else:
+            assert s["request"]["source"] == "custom"
+            assert s["request"]["preset_name"] is None
     pf = client.post("/api/portfolios", json={"weights": {"NIFTY": 3, "GOLD": 1, "CASH": 1}, "normalize": True, "initial_value": 500000}).json()
     st = client.post(f"/api/portfolios/{pf['id']}/stress-test", json={"simulation_id": ids["cvae"]}).json()
     m = st["metrics"]; assert m["var_99"] >= m["var_95"] and m["es_95"] >= m["var_95"] and m["v0"] == 500000
@@ -75,3 +94,35 @@ def test_full_workflow(client):
     assert client.get("/api/data/history-ref?asset=XXX").status_code == 422
     assert all(m["trained_at"] and m["validation"] for m in client.get("/api/models").json()["models"])
     assert client.get("/api/models/comparison").status_code == 200 and client.get("/api/backtesting/cvae").status_code == 200
+
+
+def test_every_model_produces_a_saved_scenario(client):
+    import time
+
+    expected_models = {"cvae", "fhs", "gaussian", "gaussian_copula", "t_copula"}
+    assert {model["id"] for model in client.get("/api/models").json()["models"]} == expected_models
+
+    for model in sorted(expected_models):
+        response = client.post(
+            "/api/scenarios/generate",
+            json={
+                "name": f"model check: {model}",
+                "model": model,
+                "horizon": 5,
+                "n": 25,
+                "source": "custom",
+            },
+        )
+        assert response.status_code == 202
+        scenario_id = response.json()["id"]
+
+        for _ in range(100):
+            scenario = client.get(f"/api/scenarios/{scenario_id}").json()
+            if scenario["status"] in ("completed", "failed"):
+                break
+            time.sleep(.1)
+
+        assert scenario["status"] == "completed", scenario.get("error")
+        assert scenario["request"]["model"] == model
+        assert scenario["meta"]["model"] == model
+        assert scenario["summary"]["n"] == 25

@@ -10,6 +10,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
+from typing import Literal
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request
@@ -127,6 +128,8 @@ class GenerateReq(BaseModel):
     shocks: dict[str, float] = {}
     seed: int = 42
     portfolio_id: int | None = None
+    source: Literal["preset", "custom"] = "custom"
+    preset_name: str | None = Field(None, max_length=80)
 
 
 class PortfolioReq(BaseModel):
@@ -266,6 +269,10 @@ def generate_scenarios(req: GenerateReq):
     need_ready()
     errs = ScenarioSpec(req.horizon, req.n, req.regime, req.shocks, req.seed).validate()
     if req.model not in MODEL_NAMES: errs.append(f"model must be one of {MODEL_NAMES}")
+    if req.source == "preset" and not req.preset_name:
+        errs.append("preset_name is required for built-in preset scenarios")
+    if req.source == "custom" and req.preset_name:
+        errs.append("preset_name is only valid for built-in preset scenarios")
     if errs: raise HTTPException(422, errs)
     jid = uuid.uuid4().hex[:16]
     with db.SessionLocal() as s:
