@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Download } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { ASSETS, LABEL, MODEL_LABEL, api, pct, pctU, useScenario, useScenarios } from "../api";
+import { ASSETS, LABEL, MODEL_LABEL, api, apiUrl, pct, pctU, useScenario, useScenarios } from "../api";
 import { Empty, ErrorState, GlassCard, Metric, PageIntro, Skeleton, Tabs } from "../components/ui";
 import { FanChart, Heatmap, Histogram, HBar, PathsChart, C } from "../components/charts";
 import { useApp } from "../store";
@@ -33,7 +33,7 @@ export default function Explorer() {
         <select className="!w-auto min-w-[220px]" value={id} onChange={(e) => { setSimId(e.target.value); setSp({ sim: e.target.value }); }}>
           {(list.data ?? []).filter((x: any) => x.status === "completed").map((x: any) => <option key={x.id} value={x.id}>{x.name} · {MODEL_LABEL[x.request.model]}</option>)}</select>
         <span className="text-[12px] text-tx3">{MODEL_LABEL[m.model]} v{m.model_version} · seed {m.seed} · {m.n.toLocaleString()} paths · {m.horizon}d · regime {m.regime ?? "mixed"} · {m.seconds.toFixed(2)}s</span>
-        <span className="ml-auto flex gap-2"><a className="btn btn-ghost !py-1.5" href={`/api/scenarios/${id}/export?format=csv`}><Download size={14} />CSV</a><a className="btn btn-ghost !py-1.5" href={`/api/scenarios/${id}/export?format=json`}><Download size={14} />JSON</a></span></div>
+        <span className="ml-auto flex gap-2"><a className="btn btn-ghost !py-1.5" href={apiUrl(`/api/scenarios/${id}/export?format=csv`)}><Download size={14} />CSV</a><a className="btn btn-ghost !py-1.5" href={apiUrl(`/api/scenarios/${id}/export?format=json`)}><Download size={14} />JSON</a></span></div>
       <GlassCard title={`${LABEL[tab]} — cumulative return fan`} right={<Tabs items={[...ASSETS, "PORTFOLIO"] as const} value={tab as any} onChange={setTab} labels={LABEL} />}
         hint="Bands are empirical quantiles across the generated paths at each day: dark = 25–75%, mid = 5–95%, light = 1–99%. Cyan = median. Not a forecast.">
         {bands ? <><FanChart bands={bands} history={tab === "PORTFOLIO" ? undefined : hist.data?.path} />{hist.data && tab !== "PORTFOLIO" && <p className="mt-1 text-[11.5px] text-tx3"><span className="text-warn">- - -</span> Worst {hz}-day window in the historical data for this asset ({hist.data.start} → {hist.data.end}), shown for reference only.</p>}</> : tab === "PORTFOLIO" && stress.isError ? <ErrorState error={stress.error} /> : <Skeleton h={340} />}

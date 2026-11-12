@@ -3,13 +3,38 @@ import { useQuery } from "@tanstack/react-query";
 export const ASSETS = ["NIFTY", "BANK", "IT", "GOLD", "CRUDE", "USDINR"] as const;
 export const LABEL: Record<string, string> = { NIFTY: "NIFTY 50", BANK: "NIFTY Bank", IT: "NIFTY IT", GOLD: "Gold", CRUDE: "Crude Oil", USDINR: "USD/INR", PORTFOLIO: "Portfolio" };
 export const MODEL_LABEL: Record<string, string> = { cvae: "Conditional VAE", fhs: "Filtered Hist. Sim.", t_copula: "Student-t Copula", gaussian_copula: "Gaussian Copula", gaussian: "Gaussian" };
-const BASE = import.meta.env.VITE_API_URL ?? "";
+const CONFIGURED_API_URL = (import.meta.env.VITE_API_URL ?? "").trim();
+const API_ORIGIN = (CONFIGURED_API_URL || "https://crashlab-backend.onrender.com")
+  .replace(/\/+$/, "")
+  .replace(/\/api$/i, "");
+
+export function apiUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${API_ORIGIN}${normalizedPath}`;
+}
 
 export async function api<T = any>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(BASE + path, { headers: { "Content-Type": "application/json" }, ...init });
+  const r = await fetch(apiUrl(path), { headers: { "Content-Type": "application/json" }, ...init });
   if (!r.ok) {
-    let d: any = r.statusText; try { d = (await r.json()).detail ?? d; } catch { /* non-JSON error body */ }
-    throw new Error(Array.isArray(d) ? d.join("; ") : typeof d === "string" ? d : JSON.stringify(d));
+    const body = await r.text();
+    let detail: unknown = body || r.statusText || "Request failed";
+    if (body && r.headers.get("content-type")?.includes("application/json")) {
+      try {
+        const payload: unknown = JSON.parse(body);
+        if (payload && typeof payload === "object" && "detail" in payload) {
+          detail = payload.detail;
+        } else if (payload && typeof payload === "object" && "message" in payload) {
+          detail = payload.message;
+        } else {
+          detail = payload;
+        }
+      } catch {
+        detail = body;
+      }
+    }
+    const message = typeof detail === "string" ? detail : JSON.stringify(detail);
+    const readableMessage = message.length > 500 ? `${message.slice(0, 500)}…` : message;
+    throw new Error(`HTTP ${r.status}${r.statusText ? ` ${r.statusText}` : ""}: ${readableMessage}`);
   }
   return r.json();
 }
