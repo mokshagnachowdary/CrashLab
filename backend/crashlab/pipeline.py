@@ -60,37 +60,123 @@ def test_windows(R: np.ndarray, lo: int, hi: int, h: int, step: int = 1):
     return np.array([R[s:s + h] for s in range(lo, hi - h + 1, step)])
 
 
-def var_backtest(models: dict, ds: Dataset, regimes, n_val_end: int, h=5, alpha=(0.95, 0.99), n_paths=1500):
-    """Non-overlapping h-day-horizon backtest of an exposure-weighted portfolio on the TEST period."""
+def _portfolio_forecasts(models, ds, regimes, start_index, end_index, h, alpha, n_paths, seed_base):
     R = ds.returns.values
-    w = EQ_W
-    res = {}
-    starts = list(range(n_val_end, len(R) - h, h))
-    real_loss = np.array([-(risk.portfolio_values(R[s:s + h][None], w)[0, -1] / 1e6 - 1) for s in starts])
+    if h < 1 or n_paths < 1 or not 0 <= start_index < end_index <= len(R):
+        raise ValueError("invalid backtest range, horizon, or simulation count")
+    if "fhs" in models and start_index == 0:
+        raise ValueError("FHS backtests need a preceding fitted observation")
+    starts = list(range(start_index, end_index - h + 1, h))
+    if not starts:
+        raise ValueError("backtest range must contain at least one complete horizon")
+    real_loss = np.array([
+        -(risk.portfolio_values(R[s:s + h][None], EQ_W)[0, -1] / 1e6 - 1)
+        for s in starts
+    ])
+    forecasts = {}
     for name, m in models.items():
         var = {a: [] for a in alpha}; es = {a: [] for a in alpha}; samples = []
         fhs_state = None
-        if name == "fhs": fhs_state = m.filter_variance(R[:n_val_end])  # variance filtered through train+val
+        if name == "fhs":
+            fitted_rows = getattr(m, "n_fitted", None)
+            if fitted_rows is None:
+                fitted_rows = len(m.Z)
+            if not 0 < fitted_rows <= start_index:
+                raise ValueError("FHS fit window must end no later than the backtest start")
+            fhs_state = m.filter_variance(
+                R[fitted_rows - 1:start_index], m.state_var
+            )
         for k, s in enumerate(starts):
             kw = {}
             if name == "fhs":
                 if k > 0: fhs_state = m.filter_variance(R[starts[k - 1]:s], fhs_state[-1] if len(fhs_state) else None)
-                else: fhs_state = fhs_state
                 kw["init_var"] = fhs_state[-1]
             reg = int(regimes[s - 1]) if name == "cvae" else None
-            sim = m.simulate(n_paths, h, 1000 + k, reg, None, **kw)
-            loss = -(risk.portfolio_values(sim, w)[:, -1] / 1e6 - 1)
+            sim = m.simulate(n_paths, h, seed_base + k, reg, None, **kw)
+            loss = -(risk.portfolio_values(sim, EQ_W)[:, -1] / 1e6 - 1)
             samples.append(loss[:400])
             for a in alpha:
                 v, e = risk.var_es(loss, a); var[a].append(v); es[a].append(e)
-        res[name] = {}
+        forecasts[name] = {
+            "var": {a: np.asarray(values) for a, values in var.items()},
+            "es": {a: np.asarray(values) for a, values in es.items()},
+            "samples": np.asarray(samples),
+        }
+    return {"starts": starts, "real_loss": real_loss, "models": forecasts}
+
+
+def _summarize_backtest(forecasts, h, alpha, calibration_offsets=None):
+    real_loss = forecasts["real_loss"]
+    results = {}
+    for name, forecast in forecasts["models"].items():
+        results[name] = {}
         for a in alpha:
-            v, e = np.array(var[a]), np.array(es[a])
+            offset = (calibration_offsets or {}).get(name, {}).get(str(a), 0.0)
+            v = forecast["var"][a] + offset
+            e = forecast["es"][a] + offset
             exc = real_loss >= v
-            res[name][str(a)] = {"kupiec": backtest.kupiec_pof(exc, 1 - a), "christoffersen": backtest.christoffersen(exc, 1 - a),
-                                 "acerbi_szekely": backtest.acerbi_szekely_z2(real_loss, v, e, a, np.array(samples), n_mc=1000)}
-    return {"horizon_days": h, "n_windows": len(starts), "portfolio": w,
-            "note": "Non-overlapping windows; small samples => low power, especially at 99%.", "results": res}
+            record = {
+                "kupiec": backtest.kupiec_pof(exc, 1 - a),
+                "christoffersen": backtest.christoffersen(exc, 1 - a),
+                "acerbi_szekely": backtest.acerbi_szekely_z2(
+                    real_loss, v, e, a, forecast["samples"] + offset, n_mc=1000
+                ),
+            }
+            if calibration_offsets is not None and str(a) in (calibration_offsets or {}).get(name, {}):
+                record["calibration_offset"] = offset
+            results[name][str(a)] = record
+    return {"horizon_days": h, "n_windows": len(real_loss), "portfolio": EQ_W,
+            "note": "Non-overlapping windows; small samples => low power, especially at 99%.", "results": results}
+
+
+def var_backtest(
+    models: dict, ds: Dataset, regimes, n_val_end: int, h=5, alpha=(0.95, 0.99),
+    n_paths=1500, *, end_index=None, calibration_offsets=None,
+):
+    """Non-overlapping h-day portfolio backtest over a selected chronological interval."""
+    end = len(ds.returns) if end_index is None else end_index
+    forecasts = _portfolio_forecasts(
+        models, ds, regimes, n_val_end, end, h, alpha, n_paths, seed_base=1000
+    )
+    return _summarize_backtest(forecasts, h, alpha, calibration_offsets)
+
+
+def calibrate_var_es(
+    models: dict, ds: Dataset, regimes, calibration_start: int, test_start: int,
+    h=5, n_paths=1500, alpha=0.95,
+):
+    """Fit an empirical 95% VaR residual offset, then evaluate it on a later untouched period."""
+    if not 0 < alpha < 1:
+        raise ValueError("calibration alpha must be between zero and one")
+    calibration = _portfolio_forecasts(
+        models, ds, regimes, calibration_start, test_start, h, (alpha,), n_paths, seed_base=1000
+    )
+    test = _portfolio_forecasts(
+        models, ds, regimes, test_start, len(ds.returns), h, (alpha, 0.99), n_paths, seed_base=100_000
+    )
+    offsets = {}
+    for name, forecast in calibration["models"].items():
+        residuals = calibration["real_loss"] - forecast["var"][alpha]
+        offsets[name] = {
+            str(alpha): float(np.quantile(residuals, alpha, method="higher"))
+        }
+    return {
+        "method": "empirical additive VaR residual offset; same offset applied to ES",
+        "calibration_windows": len(calibration["real_loss"]),
+        "test_windows": len(test["real_loss"]),
+        "alpha": alpha,
+        "offsets": offsets,
+        "calibration_in_sample": {
+            "raw": _summarize_backtest(calibration, h, (alpha,)),
+            "adjusted": _summarize_backtest(calibration, h, (alpha,), offsets),
+            "note": "Adjusted calibration metrics are in-sample and are not validation evidence.",
+        },
+        "test": {
+            "raw": _summarize_backtest(test, h, (alpha, 0.99)),
+            "adjusted": _summarize_backtest(test, h, (alpha, 0.99), offsets),
+            "note": "Chronological test windows are excluded from offset fitting.",
+        },
+    }
 
 
 def constraint_test(models: dict, ref_sd, h=H_EVAL, n=1000):
@@ -137,7 +223,11 @@ def run(quick: bool = False, out_dir: Path = ARTIFACT_DIR, allow_synthetic: bool
     real = test_windows(R.values, n_va, len(R), H_EVAL)
     comp = {}
     for name, m in models.items():
-        init = {"init_var": m.filter_variance(R.values[:n_va])[-1]} if name == "fhs" else {}
+        init = {
+            "init_var": m.filter_variance(
+                R.values[n_va - 1:n_va], m.state_var
+            )[-1]
+        } if name == "fhs" else {}
         sim = m.simulate(len(real), H_EVAL, 99, None, None, **init)
         comp[name] = distribution_metrics(real, sim)
     meta["oos_comparison"] = {"horizon_days": H_EVAL, "n_real_windows_overlapping": len(real),

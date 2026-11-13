@@ -28,6 +28,8 @@ class ScenarioSpec:
         errs = []
         if not 1 <= self.horizon <= MAX_HORIZON: errs.append(f"horizon must be 1..{MAX_HORIZON}")
         if not 1 <= self.n <= MAX_SCENARIOS: errs.append(f"n must be 1..{MAX_SCENARIOS}")
+        if not isinstance(self.seed, (int, np.integer)) or not 0 <= self.seed <= 2**32 - 1:
+            errs.append("seed must be an integer in 0..4294967295")
         if self.regime not in (None, *REGIMES): errs.append(f"regime must be one of {REGIMES}")
         for a, v in self.shocks.items():
             if a not in ASSETS: errs.append(f"unknown asset {a}")

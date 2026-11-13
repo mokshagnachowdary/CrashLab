@@ -13,24 +13,53 @@ from scipy import stats
 from .base import ScenarioModel
 
 
+def _nearest_psd(matrix: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    """Project a symmetric matrix to the nearest positive semi-definite matrix."""
+    m = np.asarray(matrix, dtype=float)
+    if m.ndim == 0:
+        return np.array([[float(m)]])
+    m = np.atleast_2d((m + m.T) / 2)
+    w, v = np.linalg.eigh(m)
+    w = np.clip(w, eps, None)
+    A = v @ np.diag(w) @ v.T
+    return (A + A.T) / 2
+
+
+def _safe_covariance(X: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    X = np.asarray(X, dtype=float)
+    if X.ndim == 1:
+        X = X[:, None]
+    mu = X.mean(0)
+    centered = X - mu
+    cov = np.cov(centered, rowvar=False, ddof=1)
+    if np.allclose(cov, 0.0):
+        return np.eye(centered.shape[1]) * eps
+    cov = np.atleast_2d(np.asarray(cov, dtype=float))
+    cov = _nearest_psd(cov, eps)
+    cov = (cov + cov.T) / 2
+    cov = cov + np.eye(cov.shape[0]) * max(eps, np.finfo(float).eps)
+    return cov
+
+
+def nearest_psd_corr(R: np.ndarray) -> np.ndarray:
+    R = np.asarray(R, dtype=float)
+    R = _nearest_psd(R)
+    d = np.sqrt(np.clip(np.diag(R), 1e-8, None))
+    return R / np.outer(d, d)
+
+
 class GaussianModel(ScenarioModel):
     name = "gaussian"
 
     def fit(self, returns: pd.DataFrame, **kw):
-        self.mean, self.cov = returns.mean().values, np.cov(returns.values.T)
+        X = returns.values
+        self.mean = X.mean(0)
+        self.cov = _safe_covariance(X)
         return self
 
     def simulate(self, n, horizon, seed, regime=None, constraints=None):
         rng = np.random.default_rng(seed)
         return rng.multivariate_normal(self.mean, self.cov, (n, horizon))
-
-
-def nearest_psd_corr(R: np.ndarray) -> np.ndarray:
-    w, V = np.linalg.eigh((R + R.T) / 2)
-    w = np.clip(w, 1e-6, None)
-    A = V @ np.diag(w) @ V.T
-    d = np.sqrt(np.diag(A))
-    return A / np.outer(d, d)
 
 
 class CopulaModel(ScenarioModel):

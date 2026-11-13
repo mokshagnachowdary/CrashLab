@@ -6,6 +6,7 @@ import io
 import logging
 import os
 import re
+import threading
 import time
 import uuid
 from collections import defaultdict, deque
@@ -14,7 +15,7 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
@@ -42,15 +43,86 @@ configured_cors_origins = {
 STATE = service.State()
 MAX_CONCURRENT_SIMULATIONS = int(os.getenv("CRASHLAB_MAX_CONCURRENT_SIMULATIONS", "1"))
 CONFIGURED_WORKERS = int(os.getenv("CRASHLAB_WORKERS", "1"))
-if MAX_CONCURRENT_SIMULATIONS < 1 or CONFIGURED_WORKERS < 1:
-    raise ValueError("simulation worker and concurrency limits must be positive")
+MAX_QUEUED_SIMULATIONS = int(os.getenv("CRASHLAB_MAX_QUEUED_SIMULATIONS", "8"))
+if MAX_CONCURRENT_SIMULATIONS < 1 or CONFIGURED_WORKERS < 1 or MAX_QUEUED_SIMULATIONS < 0:
+    raise ValueError("simulation worker and concurrency limits must be positive; queue limit cannot be negative")
 POOL = ThreadPoolExecutor(
     max_workers=min(CONFIGURED_WORKERS, MAX_CONCURRENT_SIMULATIONS)
 )
+SIMULATION_SLOTS = threading.BoundedSemaphore(
+    min(CONFIGURED_WORKERS, MAX_CONCURRENT_SIMULATIONS) + MAX_QUEUED_SIMULATIONS
+)
 MODEL_NAMES = ["fhs", "gaussian", "gaussian_copula", "t_copula", "cvae"]
 MAX_BODY = 200_000
-_hits: dict[str, deque] = defaultdict(deque)
 RATE = int(os.getenv("CRASHLAB_RATE_PER_MIN", 120))
+
+
+class RequestGuardMiddleware:
+    def __init__(self, app, max_body: int, rate: int):
+        self.app = app
+        self.max_body = max_body
+        self.rate = rate
+        self.hits: dict[str, deque] = defaultdict(deque)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = scope.get("headers", [])
+        content_length = next(
+            (value for name, value in headers if name.lower() == b"content-length"),
+            None,
+        )
+        if content_length is not None:
+            try:
+                declared_length = int(content_length)
+            except ValueError:
+                response = JSONResponse({"detail": "invalid content-length"}, status_code=400)
+                await response(scope, receive, send)
+                return
+            if declared_length < 0:
+                response = JSONResponse({"detail": "invalid content-length"}, status_code=400)
+                await response(scope, receive, send)
+                return
+            if declared_length > self.max_body:
+                response = JSONResponse({"detail": "request too large"}, status_code=413)
+                await response(scope, receive, send)
+                return
+
+        client = scope.get("client")
+        ip = client[0] if client else "?"
+        hits = self.hits[ip]
+        now = time.time()
+        while hits and hits[0] < now - 60:
+            hits.popleft()
+        if len(hits) >= self.rate:
+            response = JSONResponse({"detail": "rate limit exceeded"}, status_code=429)
+            await response(scope, receive, send)
+            return
+        hits.append(now)
+
+        received = 0
+        oversized = False
+
+        async def limited_receive():
+            nonlocal received, oversized
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_body:
+                    oversized = True
+                    return {"type": "http.request", "body": b"", "more_body": False}
+            return message
+
+        async def limited_send(message):
+            if not oversized:
+                await send(message)
+
+        await self.app(scope, limited_receive, limited_send)
+        if oversized:
+            response = JSONResponse({"detail": "request too large"}, status_code=413)
+            await response(scope, receive, send)
 
 
 def _process_memory_mb() -> tuple[float | None, float | None]:
@@ -90,16 +162,7 @@ def startup():
     )
 
 
-@app.middleware("http")
-async def guard(request: Request, call_next):
-    if int(request.headers.get("content-length", 0)) > MAX_BODY:
-        return JSONResponse({"detail": "request too large"}, 413)
-    ip = request.client.host if request.client else "?"
-    q, t = _hits[ip], time.time()
-    while q and q[0] < t - 60: q.popleft()
-    if len(q) >= RATE: return JSONResponse({"detail": "rate limit exceeded"}, 429)
-    q.append(t)
-    return await call_next(request)
+app.add_middleware(RequestGuardMiddleware, max_body=MAX_BODY, rate=RATE)
 
 
 # Register after the HTTP guard so CORS wraps rate-limit and other middleware responses.
@@ -127,7 +190,7 @@ class GenerateReq(BaseModel):
     n: int = Field(1000, ge=1, le=MAX_SCENARIOS)
     regime: str | None = None
     shocks: dict[str, float] = {}
-    seed: int = 42
+    seed: int = Field(42, ge=0, le=2**32 - 1)
     portfolio_id: int | None = None
     source: Literal["preset", "custom"] = "custom"
     preset_name: str | None = Field(None, max_length=80)
@@ -227,12 +290,15 @@ def models():
     out = []
     for n in MODEL_NAMES:
         m = STATE.models[n]
+        split = r["split"]
+        trained_rows = split["n_train"] if n == "cvae" else split["n_train"] + split["n_val"]
+        training_period = "train only; validation used for early stopping" if n == "cvae" else "train+validation"
         out.append({"id": n, "type": {"cvae": "deep generative (conditional VAE, GRU)", "fhs": "GJR-GARCH filtered historical simulation",
                                       "t_copula": "Student-t copula + t marginals", "gaussian_copula": "Gaussian copula + t marginals",
                                       "gaussian": "multivariate Gaussian"}[n], "version": m.version, "trained": True, "trained_at": _trained_at(),
                     "validation": (f"early-stopped, best val loss {r['cvae']['best_val_loss']:.1f}" if n == "cvae" else "evaluated out-of-sample (test period)"),
                     "supports_native_conditioning": m.supports_conditioning,
-                    "trained_on": f"{r['split']['n_train']+r['split']['n_val']} daily returns (train+val); test from {r['split']['test_start']}",
+                    "trained_on": f"{trained_rows} daily returns ({training_period}); test from {split['test_start']}",
                     "train_seconds": r["cvae"]["train_seconds"] if n == "cvae" else None,
                     "params": r["cvae"]["params"] if n == "cvae" else None})
     return {"models": out, "cvae_history": r["cvae"]["history"], "cvae_config": r["cvae"]["config"],
@@ -275,15 +341,33 @@ def generate_scenarios(req: GenerateReq):
     if req.source == "custom" and req.preset_name:
         errs.append("preset_name is only valid for built-in preset scenarios")
     if errs: raise HTTPException(422, errs)
+    if not SIMULATION_SLOTS.acquire(blocking=False):
+        raise HTTPException(429, "simulation queue is full; retry after a running job completes")
     jid = uuid.uuid4().hex[:16]
-    with db.SessionLocal() as s:
-        s.add(db.SimulationJob(id=jid, name=req.name, request=req.model_dump())); s.commit()
-    POOL.submit(_run_job, jid, req.model_dump())
+    submitted = False
+    try:
+        with db.SessionLocal() as s:
+            s.add(db.SimulationJob(id=jid, name=req.name, request=req.model_dump()))
+            s.commit()
+        try:
+            future = POOL.submit(_run_job, jid, req.model_dump())
+        except RuntimeError as exc:
+            with db.SessionLocal() as s:
+                job = s.get(db.SimulationJob, jid)
+                if job:
+                    job.status, job.error, job.finished_at = "failed", "simulation executor unavailable", db.now()
+                    s.commit()
+            raise HTTPException(503, "simulation executor is unavailable") from exc
+        submitted = True
+        future.add_done_callback(lambda _: SIMULATION_SLOTS.release())
+    finally:
+        if not submitted:
+            SIMULATION_SLOTS.release()
     return {"id": jid, "status": "queued"}
 
 
 @app.get("/api/scenarios")
-def list_scenarios(limit: int = 20):
+def list_scenarios(limit: int = Query(default=20, ge=1)):
     with db.SessionLocal() as s:
         jobs = s.scalars(select(db.SimulationJob).order_by(db.SimulationJob.created_at.desc()).limit(min(limit, 100))).all()
         return [_job_dict(j) for j in jobs]
@@ -330,7 +414,11 @@ def delete_scenario(sid: str):
 
 
 @app.get("/api/scenarios/{sid}/export")
-def export(sid: str, format: str = "json", max_paths: int = 1000):
+def export(
+    sid: str,
+    format: Literal["json", "csv"] = "json",
+    max_paths: int = Query(default=1000, ge=1, le=MAX_SCENARIOS),
+):
     with db.SessionLocal() as s:
         j = s.get(db.SimulationJob, sid)
         if not j: raise HTTPException(404, "not found")
@@ -377,7 +465,7 @@ def stress_test(pid: int, req: StressReq):
 
 
 @app.get("/api/risk/{simulation_id}")
-def get_risk(simulation_id: str, portfolio_id: int | None = None):
+def get_risk(simulation_id: str, portfolio_id: int | None = Query(default=None, ge=1)):
     with db.SessionLocal() as s:
         j = s.get(db.SimulationJob, simulation_id)
         if not j: raise HTTPException(404, "simulation not found")

@@ -5,16 +5,18 @@ from fastapi.testclient import TestClient
 def client(tmp_path_factory):
     import os
     d = tmp_path_factory.mktemp("art"); os.environ["DATABASE_URL"] = f"sqlite:///{d}/t.db"
-    from crashlab import pipeline, service, config
-    import crashlab.db as db; db.DATA_DIR = d
-    pipeline.run(quick=True, out_dir=d) if False else None
-    from crashlab.data import load_dataset
+    from crashlab import service, config
+    import crashlab.db as db
+    db.DATA_DIR = d
+    db.SIMULATIONS_DIR = d / "simulations"
     import crashlab.api as api
     from pathlib import Path
     src = Path(config.ARTIFACT_DIR)
     assert (src / "cvae.pt").exists(), "run `python -m crashlab.pipeline` first"
-    api.STATE = service.State(src).load(); db.init_db()
-    (config.DATA_DIR / "simulations").mkdir(parents=True, exist_ok=True)
+    api.DATA_DIR = d
+    api.STATE = service.State(src).load()
+    db.init_db()
+    (d / "simulations").mkdir(parents=True, exist_ok=True)
     return TestClient(api.app)
 
 def test_cors_preflight_and_frontend_gets(client):
@@ -169,3 +171,133 @@ def test_delete_only_removes_finished_custom_scenarios(client):
     assert client.get(f"/api/scenarios/{custom_id}").status_code == 404
     assert client.delete(f"/api/scenarios/{preset_id}").status_code == 403
     assert client.delete(f"/api/scenarios/{active_id}").status_code == 409
+
+
+def test_query_and_export_arguments_are_bounded(client):
+    import uuid
+    import numpy as np
+    from crashlab import db
+    import crashlab.api as api
+
+    assert client.get("/api/scenarios?limit=-1").status_code == 422
+
+    scenario_id = uuid.uuid4().hex
+    artifact = api.DATA_DIR / "simulations" / f"{scenario_id}.npz"
+    np.savez_compressed(artifact, sim=np.zeros((4, 2, 6), dtype=np.float32))
+    with db.SessionLocal() as session:
+        session.add(db.SimulationJob(
+            id=scenario_id,
+            name="export validation fixture",
+            request={"source": "custom", "model": "gaussian"},
+            status="completed",
+            meta={"model": "gaussian"},
+            array_path=str(artifact),
+        ))
+        session.commit()
+
+    assert client.get(f"/api/scenarios/{scenario_id}/export?format=invalid").status_code == 422
+    assert client.get(f"/api/scenarios/{scenario_id}/export?max_paths=-1").status_code == 422
+    assert client.get(f"/api/risk/{scenario_id}?portfolio_id=0").status_code == 422
+    exported = client.get(f"/api/scenarios/{scenario_id}/export?max_paths=1")
+    assert exported.status_code == 200
+    assert len(exported.json()["log_returns"]) == 1
+
+
+def test_negative_seed_and_full_simulation_queue_are_rejected(client, monkeypatch):
+    import threading
+    import crashlab.api as api
+
+    before = {job["id"] for job in client.get("/api/scenarios").json()}
+    invalid_seed = client.post(
+        "/api/scenarios/generate",
+        json={"model": "gaussian", "horizon": 1, "n": 1, "seed": -1},
+    )
+    assert invalid_seed.status_code == 422
+
+    monkeypatch.setattr(api, "SIMULATION_SLOTS", threading.BoundedSemaphore(0))
+    full_queue = client.post(
+        "/api/scenarios/generate",
+        json={"model": "gaussian", "horizon": 1, "n": 1},
+    )
+    assert full_queue.status_code == 429
+    after = {job["id"] for job in client.get("/api/scenarios").json()}
+    assert after == before
+
+
+def test_model_metadata_reports_actual_training_sample_sizes(client):
+    response = client.get("/api/models")
+    comparison = client.get("/api/models/comparison")
+    assert response.status_code == comparison.status_code == 200
+    split = comparison.json()["split"]
+    models = {model["id"]: model for model in response.json()["models"]}
+    assert f"{split['n_train']} daily returns (train only; validation used for early stopping)" in models["cvae"]["trained_on"]
+    assert f"{split['n_train'] + split['n_val']} daily returns (train+validation)" in models["gaussian"]["trained_on"]
+
+
+def test_chunked_request_body_limit(client):
+    import asyncio
+    import httpx
+    import crashlab.api as api
+
+    async def oversized_body():
+        yield b'{"text":"abc","padding":"'
+        yield b"x" * (api.MAX_BODY + 1)
+        yield b'"}'
+
+    async def send():
+        transport = httpx.ASGITransport(app=api.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as async_client:
+            return await async_client.post(
+                "/api/scenarios/parse",
+                content=oversized_body(),
+                headers={"content-type": "application/json", "origin": "http://localhost:5173"},
+            )
+
+    response = asyncio.run(send())
+    assert response.status_code == 413
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_request_rate_limit_returns_429():
+    import asyncio
+    import httpx
+    from fastapi.responses import JSONResponse
+    import crashlab.api as api
+
+    async def endpoint(scope, receive, send):
+        await JSONResponse({"ok": True})(scope, receive, send)
+
+    async def send_requests():
+        guard = api.RequestGuardMiddleware(endpoint, max_body=api.MAX_BODY, rate=2)
+        transport = httpx.ASGITransport(app=guard)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return [await client.get("/") for _ in range(3)]
+
+    responses = asyncio.run(send_requests())
+    assert [response.status_code for response in responses] == [200, 200, 429]
+
+
+def test_simulation_failure_is_persisted_without_false_success(client, monkeypatch):
+    import time
+    import crashlab.api as api
+
+    def fail_generation(*args, **kwargs):
+        raise RuntimeError("controlled failure")
+
+    monkeypatch.setattr(api, "generate", fail_generation)
+    response = client.post(
+        "/api/scenarios/generate",
+        json={"model": "gaussian", "horizon": 1, "n": 1},
+    )
+    assert response.status_code == 202
+    scenario_id = response.json()["id"]
+
+    for _ in range(100):
+        scenario = client.get(f"/api/scenarios/{scenario_id}").json()
+        if scenario["status"] in ("completed", "failed"):
+            break
+        time.sleep(0.01)
+
+    assert scenario["status"] == "failed"
+    assert scenario["error"] == "RuntimeError: controlled failure"
+    assert client.get("/api/health").json()["api"] == "ok"

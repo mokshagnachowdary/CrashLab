@@ -6,6 +6,7 @@ from crashlab.features import build_features, Scaler, RegimeModel
 from crashlab.models.copula import CopulaModel, GaussianModel, nearest_psd_corr
 from crashlab.models.fhs import FHSModel
 from crashlab.models.cvae import CVAEModel, CVAEConfig
+from crashlab.pipeline import calibrate_var_es
 from crashlab.parser import parse_story
 from crashlab.scenarios import ScenarioSpec, generate, constraint_report
 
@@ -50,6 +51,15 @@ def test_copula_dependence_and_psd(ds):
     def tail(x): q = x[:, 0] <= np.quantile(x[:, 0], .01); return (x[q, 1] <= np.quantile(x[:, 1], .01)).mean()
     assert tail(st) >= tail(sg) - 0.03 and t.nu >= 2.5
     bad = np.array([[1, .99, -.99], [.99, 1, .99], [-.99, .99, 1.]]); assert np.linalg.eigvalsh(nearest_psd_corr(bad)).min() > 0
+
+
+def test_gaussian_model_covariance_stays_psd_and_realistic():
+    X = pd.DataFrame({"A": [0.01, -0.02, 0.03, 0.00, -0.01], "B": [0.05, 0.04, 0.02, 0.06, 0.03]})
+    model = GaussianModel().fit(X)
+    eigs = np.linalg.eigvalsh(model.cov)
+    assert np.all(eigs > 0)
+    assert np.allclose(model.cov, model.cov.T)
+    assert np.isfinite(model.cov).all()
 
 @pytest.fixture(scope="module")
 def cv(ds):
@@ -144,6 +154,30 @@ def test_portfolio_valuation_exact():
     for bad in ({"NIFTY": .5}, {"NIFTY": 1.2, "CASH": -.2}, {"FOO": 1.}):
         with pytest.raises(ValueError): risk.validate_weights(bad)
 
+
+def test_portfolio_paths_match_independent_daily_valuation():
+    sim = np.zeros((3, 2, len(ASSETS)))
+    sim[:, 0, 0] = np.log([1.1, 0.8, 1.0])
+    sim[:, 1, 0] = np.log([0.9, 0.95, 1.0])
+    weights = {"NIFTY": 0.5, "CASH": 0.5}
+    initial_value = 1000.0
+    expected = []
+    for path in sim:
+        price = 1.0
+        values = [initial_value]
+        for daily_log_return in path[:, 0]:
+            price *= float(np.exp(daily_log_return))
+            values.append(initial_value * (weights["NIFTY"] * price + weights["CASH"]))
+        expected.append(values)
+
+    actual = risk.portfolio_values(sim, weights, initial_value)
+    assert np.allclose(actual, expected)
+    losses = (initial_value - np.asarray(expected)[:, -1]) / initial_value
+    metrics = risk.risk_metrics(actual)
+    assert np.isclose(metrics["var_95"], np.quantile(losses, 0.95))
+    assert np.isclose(metrics["es_95"], losses[losses >= np.quantile(losses, 0.95)].mean())
+
+
 def test_var_es_known_values():
     loss = np.arange(1, 101) / 100.
     var, es = risk.var_es(loss, .95)
@@ -165,6 +199,129 @@ def test_kupiec_christoffersen_as():
     s = rng.normal(0, 1, (T, 300)); r = backtest.acerbi_szekely_z2(loss, var, es, .95, s, n_mc=400)
     assert abs(r["z2"]) < .6 and r["p_value"] > .01
     assert backtest.acerbi_szekely_z2(loss * 2, var, es, .95)["z2"] > 1       # under-estimated ES => Z2 > 0
+
+
+def test_kupiec_pof_matches_independent_binomial_likelihood():
+    from scipy.stats import chi2
+
+    total, exceedances, probability = 100, 8, 0.05
+    exceptions = np.zeros(total, dtype=bool)
+    exceptions[:exceedances] = True
+    observed_rate = exceedances / total
+    likelihood_ratio = 2 * (
+        exceedances * np.log(observed_rate / probability)
+        + (total - exceedances) * np.log((1 - observed_rate) / (1 - probability))
+    )
+    expected_p = chi2.sf(likelihood_ratio, df=1)
+    result = backtest.kupiec_pof(exceptions, probability)
+
+    assert result["T"] == total
+    assert result["expected"] == total * probability
+    assert np.isclose(result["lr"], likelihood_ratio)
+    assert np.isclose(result["p_value"], expected_p)
+
+
+def test_var_backtest_includes_last_complete_nonoverlapping_window():
+    from crashlab.data import Dataset
+    from crashlab.pipeline import var_backtest
+
+    class ConstantModel:
+        def simulate(self, n, horizon, seed, regime=None, constraints=None, **kwargs):
+            return np.full((n, horizon, len(ASSETS)), 0.01)
+
+    returns = pd.DataFrame(np.zeros((6, len(ASSETS))), columns=ASSETS)
+    dataset = Dataset(pd.DataFrame(np.ones_like(returns), columns=ASSETS), returns, "fixture", False)
+    result = var_backtest(
+        {"gaussian": ConstantModel()},
+        dataset,
+        np.zeros(len(returns), dtype=int),
+        n_val_end=1,
+        h=5,
+        n_paths=20,
+    )
+    assert result["n_windows"] == 1
+
+
+def test_fhs_backtest_advances_state_from_last_fitted_return_only():
+    from crashlab.data import Dataset
+    from crashlab.pipeline import var_backtest
+
+    class TrackingFHS:
+        state_var = np.ones(len(ASSETS))
+        n_fitted = 5
+
+        def __init__(self):
+            self.filtered_rows = []
+
+        def filter_variance(self, returns, start_var=None):
+            self.filtered_rows.append(np.array(returns, copy=True))
+            return np.tile(start_var, (len(returns), 1))
+
+        def simulate(self, n, horizon, seed, regime=None, constraints=None, init_var=None):
+            return np.full((n, horizon, len(ASSETS)), -0.01)
+
+    returns = pd.DataFrame(
+        np.tile(np.arange(20, dtype=float)[:, None], (1, len(ASSETS))) / 10_000,
+        columns=ASSETS,
+    )
+    dataset = Dataset(pd.DataFrame(np.ones_like(returns), columns=ASSETS), returns, "fixture", False)
+    model = TrackingFHS()
+
+    result = var_backtest(
+        {"fhs": model},
+        dataset,
+        np.zeros(len(returns), dtype=int),
+        n_val_end=10,
+        h=5,
+        n_paths=20,
+    )
+
+    assert result["n_windows"] == 2
+    assert np.array_equal(model.filtered_rows[0], returns.values[4:10])
+    assert np.array_equal(model.filtered_rows[1], returns.values[10:15])
+
+
+def test_var_es_calibration_does_not_use_test_returns():
+    from crashlab.data import Dataset
+
+    rng = np.random.default_rng(42)
+    values = rng.normal(0, 0.01, (30, len(ASSETS)))
+    returns = pd.DataFrame(values, columns=ASSETS)
+    model = GaussianModel().fit(returns.iloc[:10])
+    dataset = Dataset(
+        pd.DataFrame(np.ones_like(values), columns=ASSETS),
+        returns,
+        "fixture",
+        False,
+    )
+    regimes = np.zeros(len(returns), dtype=int)
+    result = calibrate_var_es(
+        {"gaussian": model}, dataset, regimes, 10, 20, h=5, n_paths=500
+    )
+
+    altered_values = values.copy()
+    altered_values[20:] -= 0.1
+    altered_returns = pd.DataFrame(altered_values, columns=ASSETS)
+    altered_dataset = Dataset(
+        pd.DataFrame(np.ones_like(altered_values), columns=ASSETS),
+        altered_returns,
+        "fixture",
+        False,
+    )
+    altered_result = calibrate_var_es(
+        {"gaussian": model}, altered_dataset, regimes, 10, 20, h=5, n_paths=500
+    )
+
+    assert result["calibration_windows"] == 2
+    assert result["test_windows"] == 2
+    assert result["offsets"] == altered_result["offsets"]
+    assert result["test"]["raw"]["results"]["gaussian"]["0.95"]["kupiec"]["exceedances"] != (
+        altered_result["test"]["raw"]["results"]["gaussian"]["0.95"]["kupiec"]["exceedances"]
+    )
+    assert result["test"]["adjusted"]["results"]["gaussian"]["0.99"] == (
+        result["test"]["raw"]["results"]["gaussian"]["0.99"]
+    )
+
 
 def test_parser_story_example():
     p = parse_story("NIFTY falls 15% over 10 trading days, the rupee depreciates 4%, banking stocks experience high volatility, and crude oil increases 12%.")

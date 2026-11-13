@@ -33,7 +33,12 @@ class State:
             r = self.manifest["regime"]
             self.regime = RegimeModel(r["q_elevated"], r["q_extreme"])
             self.ref_sd = self.returns.iloc[: self.manifest["split"]["n_train"]].std().values
-            self.fhs_state = self.models["fhs"].filter_variance(self.returns.values)[-1]
+            fhs = self.models["fhs"]
+            model_end = getattr(fhs, "n_fitted", len(fhs.Z))
+            self.fhs_state = self.models["fhs"].filter_variance(
+                self.returns.values[model_end - 1:model_end],
+                fhs.state_var,
+            )[-1]
             self.ready = True
         except Exception as e:  # surfaced via /api/health, never swallowed
             self.error = f"{type(e).__name__}: {e}"

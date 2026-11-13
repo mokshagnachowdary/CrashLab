@@ -1,0 +1,1128 @@
+{
+  "method": "empirical additive VaR residual offset; same offset applied to ES",
+  "calibration_windows": 178,
+  "test_windows": 179,
+  "alpha": 0.95,
+  "offsets": {
+    "gaussian": {
+      "0.95": -0.005911202864557347
+    },
+    "gaussian_copula": {
+      "0.95": -0.003658187064299323
+    },
+    "t_copula": {
+      "0.95": -0.004075398359153028
+    },
+    "fhs": {
+      "0.95": 0.0023056067614934013
+    },
+    "cvae": {
+      "0.95": -0.003778397603907163
+    }
+  },
+  "calibration_in_sample": {
+    "raw": {
+      "horizon_days": 5,
+      "n_windows": 178,
+      "portfolio": {
+        "NIFTY": 0.3,
+        "BANK": 0.2,
+        "IT": 0.15,
+        "GOLD": 0.15,
+        "CRUDE": 0.05,
+        "CASH": 0.15
+      },
+      "note": "Non-overlapping windows; small samples => low power, especially at 99%.",
+      "results": {
+        "gaussian": {
+          "0.95": {
+            "kupiec": {
+              "T": 178,
+              "exceedances": 3,
+              "expected": 8.900000000000007,
+              "lr": 5.478867378222887,
+              "p_value": 0.019247726606563265
+            },
+            "christoffersen": {
+              "lr_ind": 4.754447082113398,
+              "p_ind": 0.029222679972858656,
+              "lr_cc": 10.233314460336285,
+              "p_cc": 0.005996032789657213,
+              "transitions": {
+                "n00": 172,
+                "n01": 2,
+                "n10": 2,
+                "n11": 1
+              }
+            },
+            "acerbi_szekely": {
+              "T": 178,
+              "z2": -0.29284136346156964,
+              "expected_exceedances": 8.900000000000007,
+              "p_value": 0.803,
+              "mc_ci95": [
+                -0.5800504868182885,
+                0.6436774635227976
+              ]
+            }
+          }
+        },
+        "gaussian_copula": {
+          "0.95": {
+            "kupiec": {
+              "T": 178,
+              "exceedances": 5,
+              "expected": 8.900000000000007,
+              "lr": 2.1231295102226255,
+              "p_value": 0.14508981070563642
+            },
+            "christoffersen": {
+              "lr_ind": 2.5246538922110418,
+              "p_ind": 0.11207936997233636,
+              "lr_cc": 4.647783402433667,
+              "p_cc": 0.09789187740058114,
+              "transitions": {
+                "n00": 168,
+                "n01": 4,
+                "n10": 4,
+                "n11": 1
+              }
+            },
+            "acerbi_szekely": {
+              "T": 178,
+              "z2": -0.1354174737602254,
+              "expected_exceedances": 8.900000000000007,
+              "p_value": 0.652,
+              "mc_ci95": [
+                -0.612295259810343,
+                0.7203490904858082
+              ]
+            }
+          }
+        },
+        "t_copula": {
+          "0.95": {
+            "kupiec": {
+              "T": 178,
+              "exceedances": 7,
+              "expected": 8.900000000000007,
+              "lr": 0.45929301699990077,
+              "p_value": 0.497954568058549
+            },
+            "christoffersen": {
+              "lr_ind": 1.2869995512191537,
+              "p_ind": 0.25660163228964705,
+              "lr_cc": 1.7462925682190544,
+              "p_cc": 0.417635480094969,
+              "transitions": {
+                "n00": 164,
+                "n01": 6,
+                "n10": 6,
+                "n11": 1
+              }
+            },
+            "acerbi_szekely": {
+              "T": 178,
+              "z2": -0.05882421743755717,
+              "expected_exceedances": 8.900000000000007,
+              "p_value": 0.538,
+              "mc_ci95": [
+                -0.6069031546770818,
+                0.7349784988001732
+              ]
+            }
+          }
+        },
+        "fhs": {
+          "0.95": {
+            "kupiec": {
+              "T": 178,
+              "exceedances": 10,
+              "expected": 8.900000000000007,
+              "lr": 0.1378474206903917,
+              "p_value": 0.7104304146498768
+            },
+            "christoffersen": {
+              "lr_ind": 6.56651369736332,
+              "p_ind": 0.010391531354073447,
+              "lr_cc": 6.704361118053711,
+              "p_cc": 0.035007933945419345,
+              "transitions": {
+                "n00": 160,
+                "n01": 7,
+                "n10": 7,
+                "n11": 3
+              }
+            },
+            "acerbi_szekely": {
+              "T": 178,
+              "z2": 0.3179939534564158,
+              "expected_exceedances": 8.900000000000007,
+              "p_value": 0.173,
+              "mc_ci95": [
+                -0.5795400716574778,
+                0.6781629814491167
+              ]
+            }
+          }
+        },
+        "cvae": {
+          "0.95": {
+            "kupiec": {
+              "T": 178,
+              "exceedances": 5,
+              "expected": 8.900000000000007,
+              "lr": 2.1231295102226255,
+              "p_value": 0.14508981070563642
+            },
+            "christoffersen": {
+              "lr_ind": 2.5246538922110418,
+              "p_ind": 0.11207936997233636,
+              "lr_cc": 4.647783402433667,
+              "p_cc": 0.09789187740058114,
+              "transitions": {
+                "n00": 168,
+                "n01": 4,
+                "n10": 4,
+                "n11": 1
+              }
+            },
+            "acerbi_szekely": {
+              "T": 178,
+              "z2": -0.16981135355291177,
+              "expected_exceedances": 8.900000000000007,
+              "p_value": 0.69,
+              "mc_ci95": [
+                -0.601572837287367,
+                0.7049922212906489
+              ]
+            }
+          }
+        }
+      }
+    },
+    "adjusted": {
+      "horizon_days": 5,
+      "n_windows": 178,
+      "portfolio": {
+        "NIFTY": 0.3,
+        "BANK": 0.2,
+        "IT": 0.15,
+        "GOLD": 0.15,
+        "CRUDE": 0.05,
+        "CASH": 0.15
+      },
+      "note": "Non-overlapping windows; small samples => low power, especially at 99%.",
+      "results": {
+        "gaussian": {
+          "0.95": {
+            "kupiec": {
+              "T": 178,
+              "exceedances": 9,
+              "expected": 8.900000000000007,
+              "lr": 0.001178559032382509,
+              "p_value": 0.9726138847459842
+            },
+            "christoffersen": {
+              "lr_ind": 3.4234048088272573,
+              "p_ind": 0.06427831398070927,
+              "lr_cc": 3.42458336785964,
+              "p_cc": 0.18045177996099593,
+              "transitions": {
+                "n00": 161,
+                "n01": 7,
+                "n10": 7,
+                "n11": 2
+              }
+            },
+            "acerbi_szekely": {
+              "T": 178,
+              "z2": 0.3987386880321875,
+              "expected_exceedances": 8.900000000000007,
+              "p_value": 0.111,
+              "mc_ci95": [
+                -0.5846629273303436,
+                0.6560987591341749
+              ]
+            },
+            "calibration_offset": -0.005911202864557347
+          }
+        },
+        "gaussian_copula": {
+          "0.95": {
+            "kupiec": {
+              "T": 178,
+              "exceedances": 9,
+              "expected": 8.900000000000007,
+              "lr": 0.001178559032382509,
+              "p_value": 0.9726138847459842
+            },
+            "christoffersen": {
+              "lr_ind": 3.4234048088272573,
+              "p_ind": 0.06427831398070927,
+              "lr_cc": 3.42458336785964,
+              "p_cc": 0.18045177996099593,
+              "transitions": {
+                "n00": 161,
+                "n01": 7,
+                "n10": 7,
+                "n11": 2
+              }
+            },
+            "acerbi_szekely": {
+              "T": 178,
+              "z2": 0.268869670062339,
+              "expected_exceedances": 8.900000000000007,
+              "p_value": 0.231,
+              "mc_ci95": [
+                -0.6170810930382372,
+                0.7292466346274117
+              ]
+            },
+            "calibration_offset": -0.003658187064299323
+          }
+        },
+        "t_copula": {
+          "0.95": {
+            "kupiec": {
+              "T": 178,
+              "exceedances": 9,
+              "expected": 8.900000000000007,
+              "lr": 0.001178559032382509,
+              "p_value": 0.9726138847459842
+            },
+            "christoffersen": {
+              "lr_ind": 3.4234048088272573,
+              "p_ind": 0.06427831398070927,
+              "lr_cc": 3.42458336785964,
+              "p_cc": 0.18045177996099593,
+              "transitions": {
+                "n00": 161,
+                "n01": 7,
+                "n10": 7,
+                "n11": 2
+              }
+            },
+            "acerbi_szekely": {
+              "T": 178,
+              "z2": 0.19801872778786667,
+              "expected_exceedances": 8.900000000000007,
+              "p_value": 0.274,
+              "mc_ci95": [
+                -0.6101145183600851,
+                0.7472325137016559
+              ]
+            },
+            "calibration_offset": -0.004075398359153028
+          }
+        },
+        "fhs": {
+          "0.95": {
+            "kupiec": {
+              "T": 178,
+              "exceedances": 9,
+              "expected": 8.900000000000007,
+              "lr": 0.001178559032382509,
+              "p_value": 0.9726138847459842
+            },
+            "christoffersen": {
+              "lr_ind": 3.4234048088272573,
+              "p_ind": 0.06427831398070927,
+              "lr_cc": 3.42458336785964,
+              "p_cc": 0.18045177996099593,
+              "transitions": {
+                "n00": 161,
+                "n01": 7,
+                "n10": 7,
+                "n11": 2
+              }
+            },
+            "acerbi_szekely": {
+              "T": 178,
+              "z2": 0.16351725386673222,
+              "expected_exceedances": 8.900000000000007,
+              "p_value": 0.316,
+              "mc_ci95": [
+                -0.5781347141385134,
+                0.6643806804965708
+              ]
+            },
+            "calibration_offset": 0.0023056067614934013
+          }
+        },
+        "cvae": {
+          "0.95": {
+            "kupiec": {
+              "T": 178,
+              "exceedances": 9,
+              "expected": 8.900000000000007,
+              "lr": 0.001178559032382509,
+              "p_value": 0.9726138847459842
+            },
+            "christoffersen": {
+              "lr_ind": 3.4234048088272573,
+              "p_ind": 0.06427831398070927,
+              "lr_cc": 3.42458336785964,
+              "p_cc": 0.18045177996099593,
+              "transitions": {
+                "n00": 161,
+                "n01": 7,
+                "n10": 7,
+                "n11": 2
+              }
+            },
+            "acerbi_szekely": {
+              "T": 178,
+              "z2": 0.26763657879274594,
+              "expected_exceedances": 8.900000000000007,
+              "p_value": 0.229,
+              "mc_ci95": [
+                -0.6037273672637069,
+                0.7045529268504841
+              ]
+            },
+            "calibration_offset": -0.003778397603907163
+          }
+        }
+      }
+    },
+    "note": "Adjusted calibration metrics are in-sample and are not validation evidence."
+  },
+  "test": {
+    "raw": {
+      "horizon_days": 5,
+      "n_windows": 179,
+      "portfolio": {
+        "NIFTY": 0.3,
+        "BANK": 0.2,
+        "IT": 0.15,
+        "GOLD": 0.15,
+        "CRUDE": 0.05,
+        "CASH": 0.15
+      },
+      "note": "Non-overlapping windows; small samples => low power, especially at 99%.",
+      "results": {
+        "gaussian": {
+          "0.95": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 1,
+              "expected": 8.950000000000008,
+              "lr": 11.882702762067993,
+              "p_value": 0.0005665766356447444
+            },
+            "christoffersen": {
+              "lr_ind": 0.011299495140731253,
+              "p_ind": 0.9153450587782943,
+              "lr_cc": 11.894002257208724,
+              "p_cc": 0.0026136668281836473,
+              "transitions": {
+                "n00": 176,
+                "n01": 1,
+                "n10": 1,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.8920191719443099,
+              "expected_exceedances": 8.950000000000008,
+              "p_value": 0.999,
+              "mc_ci95": [
+                -0.598779141999653,
+                0.6648142933747121
+              ]
+            }
+          },
+          "0.99": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 0,
+              "expected": 1.7900000000000016,
+              "lr": 3.5980202355535194,
+              "p_value": 0.057848423188144205
+            },
+            "christoffersen": {
+              "lr_ind": 0.0,
+              "p_ind": 1.0,
+              "lr_cc": 3.5980202355535194,
+              "p_cc": 0.16546259566473465,
+              "transitions": {
+                "n00": 178,
+                "n01": 0,
+                "n10": 0,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -1.0,
+              "expected_exceedances": 1.7900000000000016,
+              "p_value": 1.0,
+              "mc_ci95": [
+                -1.0,
+                1.713048424546584
+              ]
+            }
+          }
+        },
+        "gaussian_copula": {
+          "0.95": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 2,
+              "expected": 8.950000000000008,
+              "lr": 8.186230869793881,
+              "p_value": 0.004220952935802935
+            },
+            "christoffersen": {
+              "lr_ind": 0.04545552377957307,
+              "p_ind": 0.8311686200413703,
+              "lr_cc": 8.231686393573455,
+              "p_cc": 0.01631218023103187,
+              "transitions": {
+                "n00": 174,
+                "n01": 2,
+                "n10": 2,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.8228901918074085,
+              "expected_exceedances": 8.950000000000008,
+              "p_value": 1.0,
+              "mc_ci95": [
+                -0.5786873714304732,
+                0.7425294540178549
+              ]
+            }
+          },
+          "0.99": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 0,
+              "expected": 1.7900000000000016,
+              "lr": 3.5980202355535194,
+              "p_value": 0.057848423188144205
+            },
+            "christoffersen": {
+              "lr_ind": 0.0,
+              "p_ind": 1.0,
+              "lr_cc": 3.5980202355535194,
+              "p_cc": 0.16546259566473465,
+              "transitions": {
+                "n00": 178,
+                "n01": 0,
+                "n10": 0,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -1.0,
+              "expected_exceedances": 1.7900000000000016,
+              "p_value": 1.0,
+              "mc_ci95": [
+                -1.0,
+                1.7758290395879532
+              ]
+            }
+          }
+        },
+        "t_copula": {
+          "0.95": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 2,
+              "expected": 8.950000000000008,
+              "lr": 8.186230869793881,
+              "p_value": 0.004220952935802935
+            },
+            "christoffersen": {
+              "lr_ind": 0.04545552377957307,
+              "p_ind": 0.8311686200413703,
+              "lr_cc": 8.231686393573455,
+              "p_cc": 0.01631218023103187,
+              "transitions": {
+                "n00": 174,
+                "n01": 2,
+                "n10": 2,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.8220190378006818,
+              "expected_exceedances": 8.950000000000008,
+              "p_value": 0.999,
+              "mc_ci95": [
+                -0.5788199416759643,
+                0.7753764981890372
+              ]
+            }
+          },
+          "0.99": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 0,
+              "expected": 1.7900000000000016,
+              "lr": 3.5980202355535194,
+              "p_value": 0.057848423188144205
+            },
+            "christoffersen": {
+              "lr_ind": 0.0,
+              "p_ind": 1.0,
+              "lr_cc": 3.5980202355535194,
+              "p_cc": 0.16546259566473465,
+              "transitions": {
+                "n00": 178,
+                "n01": 0,
+                "n10": 0,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -1.0,
+              "expected_exceedances": 1.7900000000000016,
+              "p_value": 1.0,
+              "mc_ci95": [
+                -1.0,
+                1.7276488400011074
+              ]
+            }
+          }
+        },
+        "fhs": {
+          "0.95": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 9,
+              "expected": 8.950000000000008,
+              "lr": 0.00029351388967313596,
+              "p_value": 0.986331113242147
+            },
+            "christoffersen": {
+              "lr_ind": 0.9590334908092473,
+              "p_ind": 0.3274305092614703,
+              "lr_cc": 0.9593270046989204,
+              "p_cc": 0.6189916460002352,
+              "transitions": {
+                "n00": 160,
+                "n01": 9,
+                "n10": 9,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.09811118333736646,
+              "expected_exceedances": 8.950000000000008,
+              "p_value": 0.639,
+              "mc_ci95": [
+                -0.5792645929940657,
+                0.7919292394239329
+              ]
+            }
+          },
+          "0.99": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 1,
+              "expected": 1.7900000000000016,
+              "lr": 0.41908534881470416,
+              "p_value": 0.5173937905754096
+            },
+            "christoffersen": {
+              "lr_ind": 0.011299495140731253,
+              "p_ind": 0.9153450587782943,
+              "lr_cc": 0.4303848439554354,
+              "p_cc": 0.8063862588089284,
+              "transitions": {
+                "n00": 176,
+                "n01": 1,
+                "n10": 1,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.6031590772249686,
+              "expected_exceedances": 1.7900000000000016,
+              "p_value": 0.843,
+              "mc_ci95": [
+                -1.0,
+                1.7137896166980227
+              ]
+            }
+          }
+        },
+        "cvae": {
+          "0.95": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 1,
+              "expected": 8.950000000000008,
+              "lr": 11.882702762067993,
+              "p_value": 0.0005665766356447444
+            },
+            "christoffersen": {
+              "lr_ind": 0.011299495140731253,
+              "p_ind": 0.9153450587782943,
+              "lr_cc": 11.894002257208724,
+              "p_cc": 0.0026136668281836473,
+              "transitions": {
+                "n00": 176,
+                "n01": 1,
+                "n10": 1,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.8836928867665266,
+              "expected_exceedances": 8.950000000000008,
+              "p_value": 0.999,
+              "mc_ci95": [
+                -0.5965597823692687,
+                0.7265165666649995
+              ]
+            }
+          },
+          "0.99": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 0,
+              "expected": 1.7900000000000016,
+              "lr": 3.5980202355535194,
+              "p_value": 0.057848423188144205
+            },
+            "christoffersen": {
+              "lr_ind": 0.0,
+              "p_ind": 1.0,
+              "lr_cc": 3.5980202355535194,
+              "p_cc": 0.16546259566473465,
+              "transitions": {
+                "n00": 178,
+                "n01": 0,
+                "n10": 0,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -1.0,
+              "expected_exceedances": 1.7900000000000016,
+              "p_value": 1.0,
+              "mc_ci95": [
+                -1.0,
+                1.726569500635589
+              ]
+            }
+          }
+        }
+      }
+    },
+    "adjusted": {
+      "horizon_days": 5,
+      "n_windows": 179,
+      "portfolio": {
+        "NIFTY": 0.3,
+        "BANK": 0.2,
+        "IT": 0.15,
+        "GOLD": 0.15,
+        "CRUDE": 0.05,
+        "CASH": 0.15
+      },
+      "note": "Non-overlapping windows; small samples => low power, especially at 99%.",
+      "results": {
+        "gaussian": {
+          "0.95": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 2,
+              "expected": 8.950000000000008,
+              "lr": 8.186230869793881,
+              "p_value": 0.004220952935802935
+            },
+            "christoffersen": {
+              "lr_ind": 0.04545552377957307,
+              "p_ind": 0.8311686200413703,
+              "lr_cc": 8.231686393573455,
+              "p_cc": 0.01631218023103187,
+              "transitions": {
+                "n00": 174,
+                "n01": 2,
+                "n10": 2,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.7778951504074901,
+              "expected_exceedances": 8.950000000000008,
+              "p_value": 0.996,
+              "mc_ci95": [
+                -0.6055761540960832,
+                0.6642472508290856
+              ]
+            },
+            "calibration_offset": -0.005911202864557347
+          },
+          "0.99": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 0,
+              "expected": 1.7900000000000016,
+              "lr": 3.5980202355535194,
+              "p_value": 0.057848423188144205
+            },
+            "christoffersen": {
+              "lr_ind": 0.0,
+              "p_ind": 1.0,
+              "lr_cc": 3.5980202355535194,
+              "p_cc": 0.16546259566473465,
+              "transitions": {
+                "n00": 178,
+                "n01": 0,
+                "n10": 0,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -1.0,
+              "expected_exceedances": 1.7900000000000016,
+              "p_value": 1.0,
+              "mc_ci95": [
+                -1.0,
+                1.713048424546584
+              ]
+            }
+          }
+        },
+        "gaussian_copula": {
+          "0.95": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 3,
+              "expected": 8.950000000000008,
+              "lr": 5.547554760189527,
+              "p_value": 0.018506523314256174
+            },
+            "christoffersen": {
+              "lr_ind": 0.10286218135034275,
+              "p_ind": 0.7484215699077219,
+              "lr_cc": 5.65041694153987,
+              "p_cc": 0.05929629399677505,
+              "transitions": {
+                "n00": 172,
+                "n01": 3,
+                "n10": 3,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.7295690409666054,
+              "expected_exceedances": 8.950000000000008,
+              "p_value": 1.0,
+              "mc_ci95": [
+                -0.5807896544341379,
+                0.7655837528189764
+              ]
+            },
+            "calibration_offset": -0.003658187064299323
+          },
+          "0.99": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 0,
+              "expected": 1.7900000000000016,
+              "lr": 3.5980202355535194,
+              "p_value": 0.057848423188144205
+            },
+            "christoffersen": {
+              "lr_ind": 0.0,
+              "p_ind": 1.0,
+              "lr_cc": 3.5980202355535194,
+              "p_cc": 0.16546259566473465,
+              "transitions": {
+                "n00": 178,
+                "n01": 0,
+                "n10": 0,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -1.0,
+              "expected_exceedances": 1.7900000000000016,
+              "p_value": 1.0,
+              "mc_ci95": [
+                -1.0,
+                1.7758290395879532
+              ]
+            }
+          }
+        },
+        "t_copula": {
+          "0.95": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 2,
+              "expected": 8.950000000000008,
+              "lr": 8.186230869793881,
+              "p_value": 0.004220952935802935
+            },
+            "christoffersen": {
+              "lr_ind": 0.04545552377957307,
+              "p_ind": 0.8311686200413703,
+              "lr_cc": 8.231686393573455,
+              "p_cc": 0.01631218023103187,
+              "transitions": {
+                "n00": 174,
+                "n01": 2,
+                "n10": 2,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.8049487626685492,
+              "expected_exceedances": 8.950000000000008,
+              "p_value": 0.998,
+              "mc_ci95": [
+                -0.5837256802534596,
+                0.7818441865873064
+              ]
+            },
+            "calibration_offset": -0.004075398359153028
+          },
+          "0.99": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 0,
+              "expected": 1.7900000000000016,
+              "lr": 3.5980202355535194,
+              "p_value": 0.057848423188144205
+            },
+            "christoffersen": {
+              "lr_ind": 0.0,
+              "p_ind": 1.0,
+              "lr_cc": 3.5980202355535194,
+              "p_cc": 0.16546259566473465,
+              "transitions": {
+                "n00": 178,
+                "n01": 0,
+                "n10": 0,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -1.0,
+              "expected_exceedances": 1.7900000000000016,
+              "p_value": 1.0,
+              "mc_ci95": [
+                -1.0,
+                1.7276488400011074
+              ]
+            }
+          }
+        },
+        "fhs": {
+          "0.95": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 7,
+              "expected": 8.950000000000008,
+              "lr": 0.48186871868519887,
+              "p_value": 0.48757708096844754
+            },
+            "christoffersen": {
+              "lr_ind": 0.573259582500036,
+              "p_ind": 0.4489665446754654,
+              "lr_cc": 1.0551283011852348,
+              "p_cc": 0.5900404703669007,
+              "transitions": {
+                "n00": 164,
+                "n01": 7,
+                "n10": 7,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.3184286626691042,
+              "expected_exceedances": 8.950000000000008,
+              "p_value": 0.84,
+              "mc_ci95": [
+                -0.5773056745785283,
+                0.7825119526598615
+              ]
+            },
+            "calibration_offset": 0.0023056067614934013
+          },
+          "0.99": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 1,
+              "expected": 1.7900000000000016,
+              "lr": 0.41908534881470416,
+              "p_value": 0.5173937905754096
+            },
+            "christoffersen": {
+              "lr_ind": 0.011299495140731253,
+              "p_ind": 0.9153450587782943,
+              "lr_cc": 0.4303848439554354,
+              "p_cc": 0.8063862588089284,
+              "transitions": {
+                "n00": 176,
+                "n01": 1,
+                "n10": 1,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.6031590772249686,
+              "expected_exceedances": 1.7900000000000016,
+              "p_value": 0.843,
+              "mc_ci95": [
+                -1.0,
+                1.7137896166980227
+              ]
+            }
+          }
+        },
+        "cvae": {
+          "0.95": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 2,
+              "expected": 8.950000000000008,
+              "lr": 8.186230869793881,
+              "p_value": 0.004220952935802935
+            },
+            "christoffersen": {
+              "lr_ind": 0.04545552377957307,
+              "p_ind": 0.8311686200413703,
+              "lr_cc": 8.231686393573455,
+              "p_cc": 0.01631218023103187,
+              "transitions": {
+                "n00": 174,
+                "n01": 2,
+                "n10": 2,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -0.7797754809925421,
+              "expected_exceedances": 8.950000000000008,
+              "p_value": 0.998,
+              "mc_ci95": [
+                -0.6006016591866037,
+                0.7188941706822612
+              ]
+            },
+            "calibration_offset": -0.003778397603907163
+          },
+          "0.99": {
+            "kupiec": {
+              "T": 179,
+              "exceedances": 0,
+              "expected": 1.7900000000000016,
+              "lr": 3.5980202355535194,
+              "p_value": 0.057848423188144205
+            },
+            "christoffersen": {
+              "lr_ind": 0.0,
+              "p_ind": 1.0,
+              "lr_cc": 3.5980202355535194,
+              "p_cc": 0.16546259566473465,
+              "transitions": {
+                "n00": 178,
+                "n01": 0,
+                "n10": 0,
+                "n11": 0
+              }
+            },
+            "acerbi_szekely": {
+              "T": 179,
+              "z2": -1.0,
+              "expected_exceedances": 1.7900000000000016,
+              "p_value": 1.0,
+              "mc_ci95": [
+                -1.0,
+                1.726569500635589
+              ]
+            }
+          }
+        }
+      }
+    },
+    "note": "Chronological test windows are excluded from offset fitting."
+  },
+  "candidate_training": {
+    "baseline_fit_rows": 2680,
+    "cvae_train_rows": 2457,
+    "cvae_early_stopping_rows": 223,
+    "cvae_epochs_max": 120,
+    "cvae_epochs_run": 120,
+    "cvae_best_validation_loss": 1.7125718593597412,
+    "cvae_train_seconds": 1280.1825323104858,
+    "cvae_windows": {
+      "train": 9698,
+      "val": 846
+    },
+    "cvae_config": {
+      "hidden": 64,
+      "latent": 8,
+      "max_h": 20,
+      "horizons": [
+        5,
+        10,
+        15,
+        20
+      ],
+      "epochs": 120,
+      "batch": 256,
+      "lr": 0.002,
+      "beta_max": 0.3,
+      "warmup": 30,
+      "patience": 20,
+      "clip": 1.0,
+      "lam_cum": 1.0,
+      "conditional": true,
+      "tail_aware": false,
+      "t_df": 4.0,
+      "mask_p": 0.5,
+      "seed": 7,
+      "train_start": 0
+    },
+    "candidate_weights_saved": false
+  },
+  "protocol": {
+    "dataset_source": "yahoo_finance",
+    "synthetic": false,
+    "observations": 4469,
+    "fit_end_index": 2457,
+    "model_selection_end_index": 2680,
+    "calibration_start_index": 2680,
+    "calibration_end_index": 3574,
+    "test_start_index": 3574,
+    "test_end_index": 4469,
+    "fit_end_date": "2018-06-04",
+    "model_selection_end_date": "2019-05-15",
+    "calibration_end_date": "2023-02-03",
+    "test_start_date": "2023-02-06",
+    "test_end_date": "2026-11-06",
+    "baseline_fit_end_index": 2680,
+    "cvae_train_end_index": 2457,
+    "cvae_early_stopping_end_index": 2680,
+    "test_used_for_fitting_or_calibration": false
+  }
+}

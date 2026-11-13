@@ -15,6 +15,7 @@ class FHSModel(ScenarioModel):
     def fit(self, returns: pd.DataFrame, regimes: np.ndarray | None = None, **kw):
         self.assets = list(returns.columns)
         N, T = len(self.assets), len(returns)
+        self.n_fitted = T
         self.mu, self.omega, self.alpha, self.gamma, self.beta = (np.zeros(N) for _ in range(5))
         Z, cond, self.diagnostics = np.zeros((T, N)), np.zeros((T, N)), {}
         for j, a in enumerate(self.assets):
